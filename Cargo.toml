@@ -1,0 +1,21 @@
+[package]
+name = "love-injector"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dwmapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+getargs = "0.5.0"
+once_cell = "1.19.0"
+widestring = "1.0.2"
+windows = { version = "0.54.0", features = ["Win32_System_Console", "Win32_System", "Win32_Foundation", "Win32_System_LibraryLoader"] }
+
+[dependencies.retour]
+version = "0.4.0-alpha.1"
+features = ["static-detour"]
+
+[build-dependencies]
+forward-dll = "0.1.13"
