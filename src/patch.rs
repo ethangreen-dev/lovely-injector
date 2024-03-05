@@ -1,4 +1,6 @@
-use std::{collections::HashMap, env, fs};
+use std::path::PathBuf;
+use std::fs;
+use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
 use wildmatch::WildMatch;
@@ -9,18 +11,28 @@ pub static PATCHES: OnceCell<Vec<Patch>> = OnceCell::new();
 pub static PATCH_TABLE: OnceCell<HashMap<String, Vec<usize>>> = OnceCell::new();
 
 pub fn is_patch_target(name: &str) -> bool {
-    PATCH_TABLE.get().unwrap().get(name).is_some()
+    let name = name.replacen('@', "", 1);
+    PATCH_TABLE.get().unwrap().get(&name).is_some()
 }
 
 pub fn apply(input: &str, name: &str) -> Option<String> {
+    let name = name.replacen('@', "", 1);
     let patches = PATCH_TABLE
         .get()
         .expect("Failed to get PATCH_TABLE, this is a bug")
-        .get(name)?
+        .get(&name)?
         .iter()
-        .map(|x| PATCHES.get().unwrap().get(*x));
+        .map(|x| PATCHES.get().unwrap().get(*x))
+        .collect::<Vec<_>>();
 
-    let pattern_patches = patches.clone().filter_map(|patch| match patch {
+    // Is this superfluous? Yes.
+    if patches.len() == 1 {
+        println!("[LOVELY] Applying 1 patch to '{name}'");
+    } else {
+        println!("[LOVELY] Applying {} patches to '{name}'", patches.len());
+    }
+
+    let pattern_patches = patches.iter().filter_map(|patch| match patch {
         Some(Patch::Pattern(x)) => Some(x),
         _ => None,
     }).collect::<Vec<_>>();
@@ -33,7 +45,7 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
         out.append(&mut new_line);
     }
 
-    let copy_patches = patches.filter_map(|patch| match patch {
+    let copy_patches = patches.iter().filter_map(|patch| match patch {
         Some(Patch::Copy(x)) => Some(x),
         _ => None,
     }).collect::<Vec<_>>();
@@ -100,14 +112,11 @@ fn apply_copy_patches(input: &str, patches: &[&CopyPatch]) -> String {
     out
 }
 
-fn merge_payloads(sources: &[String]) -> String {
+fn merge_payloads(sources: &Vec<PathBuf>) -> String {
     let mut merged = Vec::new();
-    let current_dir = env::current_dir().unwrap();
-
     for source in sources {
-        let source_path = current_dir.join(source);
-        let contents = fs::read_to_string(&source_path)
-            .unwrap_or_else(|_| panic!("Failed to read payload file at '{source_path:?}'."));
+        let contents = fs::read_to_string(&source)
+            .unwrap_or_else(|_| panic!("Failed to read payload file at '{source:?}'."));
 
         merged.push(contents);
     }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -30,7 +32,7 @@ pub enum CopyAt {
 pub struct CopyPatch {
     pub position: CopyAt,
     pub target: String,
-    pub sources: Vec<String>,
+    pub sources: Vec<PathBuf>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -40,14 +42,14 @@ pub enum Patch {
     Copy(CopyPatch),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Manifest {
     pub version: String,
     pub dump_lua: bool,
     pub priority: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PatchManifest {
     pub manifest: Manifest,
     pub patches: Vec<Patch>
