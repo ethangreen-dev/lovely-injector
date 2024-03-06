@@ -71,6 +71,13 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
         }
     }
 
+    if !mod_dir.is_dir() {
+        println!("[LOVELY] Creating mods directory at {mod_dir:?}");
+        fs::create_dir_all(&mod_dir).unwrap();
+    }
+
+    println!("[LOVELY] Using mods directory at {mod_dir:?}");
+
     // Patch files are stored within the root of mod subdirectories within the mods dir.
     // - MOD_DIR/lovely.toml
     // - MOD_DIR/lovely/*.toml
