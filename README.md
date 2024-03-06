@@ -1,10 +1,19 @@
 # Lovely is a runtime lua injector for LÖVE 2d
 
-Lovely is a lua injector which embeds code into the game process at runtime. This is accomplished without ever needing to mutate the game's executable as no unpacking and repacking is required. This ensures that mods can be easily upgrade and uninstalled without needing to reinstall the game.
+Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/) game at runtime. Unlike executable patchers, mods can be installed, updated, and removed *over and over again* without requiring a partial or total game reinstallation. This is accomplished through in-process lua API detouring and an easy to use (and distribute) patch system.
+
+## Installation
+
+1. Download the latest release.
+2. Open the .zip archive, copy `dwmapi.dll` into the game directory. You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
+3. Install one or more mods into `%appdata%/Balatro/Mods`.
+4. Run the game.
+
+**Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own directory within `%AppData%/Balatro/Mods`. No exceptions!
 
 ## Patches
 
-*Note that the patch format is unstable and prone to change until Lovely is stable.*
+*Note that the patch format is unstable and prone to change until Lovely is out of early development.*
 
 *Patch files* define where and how code injection occurs within the game process. For example, this is a patch for the modloader Steamodded:
 
@@ -42,23 +51,20 @@ This file contains two patch definitions - a pattern patch, which (currently) ch
 
 ### Patch files
 
-Patch files are loaded from mod directories inside of `AppData/Balatro/Mods`. Lovely will load any patch files present within `Mods/ModName/lovely/` or load a single patch from `Mods/ModName/lovely.toml`. If multiple patches are loaded they will be injected into the game in the order in which they are found.
+Patch files are loaded from mod directories inside of `%AppData%/Balatro/Mods`. Lovely will load any patch files present within `Mods/ModName/lovely/` or load a single patch from `%AppData/Balatro/Mods/ModName/lovely.toml`. If multiple patches are loaded they will be injected into the game in the order in which they are found.
 
-Paths defined within the patch are rooted by the mod's directory. For example, `core/deck.lua` is resolved to `AppData/Balatro/Steamodded/core/deck.lua`.
+Paths defined within the patch are rooted by the mod's directory. For example, `core/deck.lua` is resolved to `%AppData%/Balatro/Steamodded/core/deck.lua`.
 
 ### Patch targets
 
-Each patch definition has a single patch target. These targets are the relative paths of source files when dumped from the game with a tool like 7zip. For example, I can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
+Each patch definition has a single patch target. These targets are the relative paths of source files when dumped from the game with a tool like 7zip. For example, one can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
+
+### Patch debugging
+
+Lovely dumps patched lua source files to `%AppData%/Balatro/Mods/lovely/dump`.
 
 ## Not yet implemented
 
 - `manifest.priority`
 - `manifest.dump_lua`
 - `manifest.version`
-
-## User installation
-
-1. Download the latest release.
-2. Open the .zip archive, copy `dwmapi.dll` into the game directory. You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-3. Install one or more mods into `%appdata%/Balatro/Mods`.
-4. Run the game.
