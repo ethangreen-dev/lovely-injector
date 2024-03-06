@@ -12,6 +12,8 @@ use retour::static_detour;
 use windows::core::{s, w};
 use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::Win32::System::ProcessStatus::GetProcessImageFileNameA;
 
 use once_cell::sync::OnceCell;
 
@@ -21,33 +23,41 @@ static LOADER_DIR: OnceCell<PathBuf> = OnceCell::new();
 static MOD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
 static_detour! {
-    pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8);
+    pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8) -> u32;
 }
 
-unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buff: *const u8, size: isize, name_buf: *const u8) {
-    let name = CStr::from_ptr(name_buf as _).to_str().unwrap();
+unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+    let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();
     if !patch::is_patch_target(name) {
-        return LuaLoadbuffer_Detour.call(lua_state, buff, size, name_buf);
+        return LuaLoadbuffer_Detour.call(lua_state, buf_ptr, size, name_ptr);
     }
 
-    let input_buf = std::slice::from_raw_parts(buff, size as _);
+    let buf = std::slice::from_raw_parts(buf_ptr, size as _);
+    let buf_str = CString::new(buf).unwrap();
+    let buf_str = buf_str.to_str().unwrap();
 
-    let input = CString::from_vec_unchecked(input_buf.to_vec());
-    let input = input.to_str().unwrap().to_string();
-
-    let patched = patch::apply(input.as_str(), name);
+    let patched = patch::apply(buf_str, name);
     if patched.is_none() {
-        return LuaLoadbuffer_Detour.call(lua_state, buff, size, name_buf);
+        return LuaLoadbuffer_Detour.call(lua_state, buf_ptr, size, name_ptr);
     }
 
     let patched = patched.unwrap();
-    let path = format!("patch-{name}");
-    fs::write(path, &patched).unwrap();
+    let patch_dump = MOD_DIR.get_unchecked()
+        .join("lovely")
+        .join("dump")
+        .join(name);
+    let dump_parent = patch_dump.parent().unwrap();
+
+    if !dump_parent.is_dir() {
+        fs::create_dir_all(dump_parent).unwrap();
+    }
+    fs::write(patch_dump, &patched).unwrap();
 
     let raw = CString::new(patched).unwrap();
-    let raw_nul = raw.as_bytes();
+    let raw_size = raw.as_bytes().len();
+    let raw_ptr = raw.into_raw();
 
-    LuaLoadbuffer_Detour.call(lua_state, raw_nul.as_ptr(), raw_nul.len() as _, name_buf)
+    LuaLoadbuffer_Detour.call(lua_state, raw_ptr as _, raw_size as _, name_ptr)
 }
 
 #[no_mangle]
@@ -168,7 +178,7 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.
     let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
     let proc = GetProcAddress(handle, s!("luaL_loadbuffer")).unwrap();
-    let fn_target = std::mem::transmute::<_, unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8)>(proc);
+    let fn_target = std::mem::transmute::<_, unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8) -> u32>(proc);
 
     LuaLoadbuffer_Detour.initialize(
         fn_target, 

@@ -74,16 +74,21 @@ fn apply_pattern_patches(line: &str, patches: &[&PatternPatch]) -> Vec<String> {
             String::new()
         };
 
-        let payload = format!("{indent}{}", patch.payload.as_ref().unwrap());
+        let payload_ref = patch.payload.as_ref().unwrap();
+        let mut payload_lines = payload_ref.split('\n')
+            .map(|x| format!("{indent}{x}"))
+            .collect::<Vec<_>>();
+        // let payload = format!("{indent}{}", patch.payload.as_ref().unwrap());
         match patch.position {
             PatternAt::At => {
-                line = payload.clone()
+                let payload = format!("{indent}{}", patch.payload.as_ref().unwrap());
+                line = payload
             }
             PatternAt::After => {
-                after.push(payload.clone()) 
+                after.append(&mut payload_lines)
             },
             PatternAt::Before => {
-                before.push(payload.clone())
+                before.append(&mut payload_lines)
             },
         }
     }

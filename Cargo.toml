@@ -17,7 +17,7 @@ toml = "0.8.10"
 walkdir = "2.5.0"
 widestring = "1.0.2"
 wildmatch = "2.3.0"
-windows = { version = "0.54.0", features = ["Win32_System_Console", "Win32_System", "Win32_Foundation", "Win32_System_LibraryLoader"] }
+windows = { version = "0.54.0", features = ["Win32_System_Console", "Win32_System", "Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_System_ProcessStatus"] }
 
 [dependencies.retour]
 version = "0.4.0-alpha.1"
