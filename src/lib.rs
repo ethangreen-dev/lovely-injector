@@ -164,6 +164,7 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
         .collect::<Vec<_>>();
 
     let mut patches: Vec<Patch> = Vec::new();
+    let mut var_table: HashMap<String, String> = HashMap::new();   
 
     // Load n > 0 patch files from the patch directory, collecting them for later processing.
     for patch_file in patch_files {
@@ -190,6 +191,7 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
 
         let inner_patches = patch.patches.as_mut(); 
         patches.append(inner_patches);
+        var_table.extend(patch.vars);
     }
 
     let mut file_patches: Vec<ModulePatch> = Vec::new();
@@ -225,8 +227,9 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
 
     patch::PATCHES.set(patches).unwrap();
     patch::PATCH_TABLE.set(patch_table).unwrap();
+    patch::VAR_TABLE.set(var_table).unwrap();
+    
     FILE_PATCHES.set(file_patches).unwrap();
-
     MOD_DIR.set(mod_dir).unwrap();
     
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.

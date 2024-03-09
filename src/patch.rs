@@ -4,6 +4,7 @@ use std::fs;
 use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
+use regex_lite::Regex;
 use wildmatch::WildMatch;
 use windows::core::s;
 
@@ -46,7 +47,10 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
     let mut out = Vec::new();
 
     for line in lines {
-        let mut new_line = apply_pattern_patches(line, &pattern_patches[..]);
+        let mut new_line = apply_pattern_patches(&line, &pattern_patches[..])
+            .into_iter()
+            .map(|x| apply_var_interp(&x))
+            .collect();
         out.append(&mut new_line);
     }
 
@@ -61,19 +65,24 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
     Some(out)
 }
 
-fn apply_var_interp(line: &str) -> Option<String> {
-    if !WildMatch::new("{{lovely::*}}").matches(line) {
-        return None;
+fn apply_var_interp(line: &str) -> String {
+    let re = Regex::new(r"\{\{lovely:(\w+)\}\}");
+    let Ok(re) = re else {
+        panic!("A regex error occured: {re:?}");
+    };
+
+    let var_table = VAR_TABLE.get().unwrap();
+    let mut working = line.to_string();
+    for (cap, [var]) in re.captures_iter(line).map(|x| x.extract()) {
+        let Some(val) = var_table.get(var) else {
+            panic!("Attempted to interpolate an unregistered variable '{var}'");
+        };      
+
+        // This clones the string each time. Not efficient.
+        working = working.replace(cap, val);
     }
 
-    // Extract the variable's name from the lovely var syntax.
-    let start = line.find("{{lovely::")?;
-    let end = line.find("}}")?;
-
-    let name = line[start..end].replacen("{{lovely::", "", 1).replacen("}}", "", 1);
-    let val = VAR_TABLE.get().unwrap().get(&name)?;
-
-    todo!()
+    working
 }
 
 fn apply_pattern_patches(line: &str, patches: &[&PatternPatch]) -> Vec<String> {
