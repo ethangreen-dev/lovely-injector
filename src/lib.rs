@@ -1,3 +1,6 @@
+#[allow(non_upper_case_globals)]
+
+pub mod sys;
 mod manifest;
 mod patch;
 
@@ -7,13 +10,16 @@ use std::ffi::{c_void, CStr, CString};
 use std::path::PathBuf;
 
 use getargs::{Arg, Options};
+use manifest::ModulePatch;
 use retour::static_detour;
 
-use windows::core::{s, w};
-use windows::Win32::System::Console::AllocConsole;
+use widestring::U16CString;
+use windows::core::{s, w, PCWSTR};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_WRITE, OPEN_EXISTING};
+use windows::Win32::System::Console::{AllocConsole, SetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
-use windows::Win32::System::Threading::GetCurrentProcess;
-use windows::Win32::System::ProcessStatus::GetProcessImageFileNameA;
+use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
 use once_cell::sync::OnceCell;
 
@@ -22,12 +28,21 @@ use crate::manifest::{Patch, PatchManifest};
 static LOADER_DIR: OnceCell<PathBuf> = OnceCell::new();
 static MOD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
+static FILE_PATCHES: OnceCell<Vec<ModulePatch>> = OnceCell::new();
+
 static_detour! {
     pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8) -> u32;
 }
 
 unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
     let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();
+
+    // Search for a patch file to be loaded before this one.
+    let load_target = FILE_PATCHES.get().unwrap().iter().find(|x| format!("@{}",x.before) == name);
+    if let Some(patch) = load_target {
+        patch::load_file(patch, lua_state);
+    }
+
     if !patch::is_patch_target(name) {
         return LuaLoadbuffer_Detour.call(lua_state, buf_ptr, size, name_ptr);
     }
@@ -63,7 +78,33 @@ unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buf_ptr: *con
 #[no_mangle]
 #[allow(non_snake_case)]
 unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void) -> u8 {
+    // Setup console redirection, replacing Love's own implementation.
     let _ = AllocConsole();
+ 
+    std::panic::set_hook(Box::new(|x| unsafe {
+        let message = format!("lovely-injector has crashed: \n{x}");
+
+        let message = U16CString::from_str(message);
+        MessageBoxW(
+            HWND(0),
+            PCWSTR(message.unwrap().as_ptr()),
+            w!("lovely-injector"),
+            MESSAGEBOX_STYLE(0),
+        );
+    }));
+
+    let c_handle = CreateFileW(
+        w!("CONOUT$"),
+        0x40000000, // GENERIC_WRITE
+        FILE_SHARE_WRITE,
+        None,
+        OPEN_EXISTING,
+        FILE_FLAGS_AND_ATTRIBUTES(0),
+        None
+    ).expect("Failed to open CONOUT$");
+
+    SetStdHandle(STD_INPUT_HANDLE, c_handle).unwrap();
+    SetStdHandle(STD_ERROR_HANDLE, c_handle).unwrap();
 
     if reason != 1 {
         return 1;
@@ -141,17 +182,28 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
             if let Patch::Copy(ref mut x) = patch {
                 x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
             }
+
+            if let Patch::Module(ref mut x) = patch {
+                x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
+            }
         }
 
         let inner_patches = patch.patches.as_mut(); 
         patches.append(inner_patches);
     }
 
+    let mut file_patches: Vec<ModulePatch> = Vec::new();
     let mut patch_table: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, patch) in patches.iter().enumerate() {
         let target = match patch {
             Patch::Pattern(x) => &x.target,
             Patch::Copy(x) => &x.target,
+
+            // File patches don't need to be registered in the table, so load them normally and skip iteration.
+            Patch::Module(x) => {
+                file_patches.push(x.clone());
+                continue;
+            }
         };
 
         // Initialize a patch table entry with the new target.
@@ -173,6 +225,8 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
 
     patch::PATCHES.set(patches).unwrap();
     patch::PATCH_TABLE.set(patch_table).unwrap();
+    FILE_PATCHES.set(file_patches).unwrap();
+
     MOD_DIR.set(mod_dir).unwrap();
     
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.

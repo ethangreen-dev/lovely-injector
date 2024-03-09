@@ -1,14 +1,19 @@
+use std::ffi::{CString, c_void};
 use std::path::PathBuf;
 use std::fs;
 use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
 use wildmatch::WildMatch;
+use windows::core::s;
 
-use crate::manifest::{CopyAt, CopyPatch, Patch, PatternAt, PatternPatch};
+use crate::manifest::{CopyAt, CopyPatch, ModulePatch, Patch, PatternAt, PatternPatch};
+use crate::{sys, LuaLoadbuffer_Detour};
 
 pub static PATCHES: OnceCell<Vec<Patch>> = OnceCell::new();
 pub static PATCH_TABLE: OnceCell<HashMap<String, Vec<usize>>> = OnceCell::new();
+
+pub static VAR_TABLE: OnceCell<HashMap<String, String>> = OnceCell::new();
 
 pub fn is_patch_target(name: &str) -> bool {
     let name = name.replacen('@', "", 1);
@@ -54,6 +59,21 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
     let out = apply_copy_patches(&out, &copy_patches[..]);
 
     Some(out)
+}
+
+fn apply_var_interp(line: &str) -> Option<String> {
+    if !WildMatch::new("{{lovely::*}}").matches(line) {
+        return None;
+    }
+
+    // Extract the variable's name from the lovely var syntax.
+    let start = line.find("{{lovely::")?;
+    let end = line.find("}}")?;
+
+    let name = line[start..end].replacen("{{lovely::", "", 1).replacen("}}", "", 1);
+    let val = VAR_TABLE.get().unwrap().get(&name)?;
+
+    todo!()
 }
 
 fn apply_pattern_patches(line: &str, patches: &[&PatternPatch]) -> Vec<String> {
@@ -115,6 +135,39 @@ fn apply_copy_patches(input: &str, patches: &[&CopyPatch]) -> String {
     }
 
     out
+}
+// Load the target path into the game as a new "file".
+pub unsafe fn load_file(patch: &ModulePatch, lua_state: *mut c_void) {
+    for src in &patch.sources {
+        let contents = fs::read_to_string(src)
+            .unwrap_or_else(|_| panic!("Failed to read patch source at '{src:?}'"));
+
+        let name = src.file_name().unwrap().to_string_lossy();
+        print!("[LOVELY] Applying module injection for '{name}'");
+ 
+        let buf = CString::new(contents).unwrap();
+        let buf_len = buf.as_bytes().len();
+
+        let name = format!("@{name}");
+        let name_buf = CString::new(name).unwrap();
+
+        let top = sys::lua_gettop(lua_state);
+
+        // Push the global package.loaded table onto the stack, saving its index.
+        sys::lua_getfield(lua_state, -10002, s!("package").0 as _);
+        sys::lua_getfield(lua_state, -1, s!("loaded").0 as _);
+        let field_index = sys::lua_gettop(lua_state);
+
+        // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
+        LuaLoadbuffer_Detour.call(lua_state, buf.into_raw() as _, buf_len as _, name_buf.into_raw() as _);
+        let status = sys::lua_pcall(lua_state as _, 0, -1, 0);
+
+        // Insert the top of the stack into package.loaded global table.
+        sys::lua_setfield(lua_state, field_index, s!("nativefs").0 as _);
+        sys::lua_settop(lua_state, top);
+
+        println!(" - OK ({status:x?})");
+    }
 }
 
 fn merge_payloads(sources: &Vec<PathBuf>) -> String {
