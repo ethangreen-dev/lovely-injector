@@ -61,6 +61,7 @@ pub enum CopyAt {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModulePatch {
-    pub sources: Vec<PathBuf>,
+    pub source: PathBuf,
     pub before: String,
+    pub name: String,
 }

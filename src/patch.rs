@@ -47,10 +47,7 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
     let mut out = Vec::new();
 
     for line in lines {
-        let mut new_line = apply_pattern_patches(&line, &pattern_patches[..])
-            .into_iter()
-            .map(|x| apply_var_interp(&x))
-            .collect();
+        let mut new_line = apply_pattern_patches(&line, &pattern_patches[..]);
         out.append(&mut new_line);
     }
 
@@ -60,7 +57,11 @@ pub fn apply(input: &str, name: &str) -> Option<String> {
     }).collect::<Vec<_>>();
 
     let out = out.join("\n");
-    let out = apply_copy_patches(&out, &copy_patches[..]);
+    let out = apply_copy_patches(&out, &copy_patches[..])
+        .lines()
+        .map(|x| apply_var_interp(x))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     Some(out)
 }
@@ -147,36 +148,38 @@ fn apply_copy_patches(input: &str, patches: &[&CopyPatch]) -> String {
 }
 // Load the target path into the game as a new "file".
 pub unsafe fn load_file(patch: &ModulePatch, lua_state: *mut c_void) {
-    for src in &patch.sources {
-        let contents = fs::read_to_string(src)
-            .unwrap_or_else(|_| panic!("Failed to read patch source at '{src:?}'"));
+    let src = &patch.source;
+    let contents = fs::read_to_string(src)
+        .unwrap_or_else(|_| panic!("Failed to read patch source at '{src:?}'"));
 
-        let name = src.file_name().unwrap().to_string_lossy();
-        print!("[LOVELY] Applying module injection for '{name}'");
- 
-        let buf = CString::new(contents).unwrap();
-        let buf_len = buf.as_bytes().len();
+    let name = src.file_name().unwrap().to_string_lossy();
+    print!("[LOVELY] Applying module injection for '{name}'");
 
-        let name = format!("@{name}");
-        let name_buf = CString::new(name).unwrap();
+    let buf = CString::new(contents).unwrap();
+    let buf_len = buf.as_bytes().len();
 
-        let top = sys::lua_gettop(lua_state);
+    let name = format!("@{name}");
+    let name_buf = CString::new(name).unwrap();
 
-        // Push the global package.loaded table onto the stack, saving its index.
-        sys::lua_getfield(lua_state, -10002, s!("package").0 as _);
-        sys::lua_getfield(lua_state, -1, s!("loaded").0 as _);
-        let field_index = sys::lua_gettop(lua_state);
+    let top = sys::lua_gettop(lua_state);
 
-        // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        LuaLoadbuffer_Detour.call(lua_state, buf.into_raw() as _, buf_len as _, name_buf.into_raw() as _);
-        let status = sys::lua_pcall(lua_state as _, 0, -1, 0);
+    // Push the global package.loaded table onto the stack, saving its index.
+    sys::lua_getfield(lua_state, -10002, s!("package").0 as _);
+    sys::lua_getfield(lua_state, -1, s!("loaded").0 as _);
+    let field_index = sys::lua_gettop(lua_state);
 
-        // Insert the top of the stack into package.loaded global table.
-        sys::lua_setfield(lua_state, field_index, s!("nativefs").0 as _);
-        sys::lua_settop(lua_state, top);
+    // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
+    LuaLoadbuffer_Detour.call(lua_state, buf.into_raw() as _, buf_len as _, name_buf.into_raw() as _);
+    let status = sys::lua_pcall(lua_state as _, 0, -1, 0);
 
-        println!(" - OK ({status:x?})");
-    }
+    // Insert the top of the stack into package.loaded global table.
+    let module_name = CString::new(patch.name.clone())
+        .unwrap_or_else(|_| panic!("Module name '{}' contains malformed or otherwise invalid utf8.", patch.name));
+    
+    sys::lua_setfield(lua_state, field_index, module_name.into_raw() as _);
+    sys::lua_settop(lua_state, top);
+
+    println!(" - OK ({status:x?})");
 }
 
 fn merge_payloads(sources: &Vec<PathBuf>) -> String {

@@ -185,7 +185,7 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
             }
 
             if let Patch::Module(ref mut x) = patch {
-                x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
+                x.source = mod_dir.join(&x.source);
             }
         }
 
