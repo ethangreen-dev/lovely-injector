@@ -164,7 +164,7 @@ pub unsafe fn load_file(patch: &ModulePatch, lua_state: *mut c_void) {
     let top = sys::lua_gettop(lua_state);
 
     // Push the global package.loaded table onto the stack, saving its index.
-    sys::lua_getfield(lua_state, -10002, s!("package").0 as _);
+    sys::lua_getfield(lua_state, sys::LUA_GLOBALSINDEX, s!("package").0 as _);
     sys::lua_getfield(lua_state, -1, s!("loaded").0 as _);
     let field_index = sys::lua_gettop(lua_state);
 
