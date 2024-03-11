@@ -13,6 +13,7 @@ use getargs::{Arg, Options};
 use manifest::ModulePatch;
 use retour::static_detour;
 
+use sha2::{Digest, Sha256};
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
 use windows::Win32::Foundation::HWND;
@@ -66,6 +67,15 @@ unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buf_ptr: *con
     if !dump_parent.is_dir() {
         fs::create_dir_all(dump_parent).unwrap();
     }
+ 
+    // Compute a sha256 hash of the patched buffer.
+    let mut hasher = Sha256::new();
+    hasher.update(patched.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+
+    // Prefix the patched buffer with the hash. This is not efficient, but it works.
+    let patched = format!("LOVELY_INTEGRITY = '{hash}'\n\n{patched}");
+
     fs::write(patch_dump, &patched).unwrap();
 
     let raw = CString::new(patched).unwrap();
