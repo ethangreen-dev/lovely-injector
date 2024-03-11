@@ -17,8 +17,7 @@ use sha2::{Digest, Sha256};
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
 use windows::Win32::Foundation::HWND;
-use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_WRITE, OPEN_EXISTING};
-use windows::Win32::System::Console::{AllocConsole, SetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE};
+use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
@@ -88,8 +87,9 @@ unsafe extern "C" fn lua_loadbuffer_detour(lua_state: *mut c_void, buf_ptr: *con
 #[no_mangle]
 #[allow(non_snake_case)]
 unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void) -> u8 {
-    // Setup console redirection, replacing Love's own implementation.
-    let _ = AllocConsole();
+    if reason != 1 {
+        return 1;
+    }
  
     std::panic::set_hook(Box::new(|x| unsafe {
         let message = format!("lovely-injector has crashed: \n{x}");
@@ -103,23 +103,16 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
         );
     }));
 
-    let c_handle = CreateFileW(
-        w!("CONOUT$"),
-        0x40000000, // GENERIC_WRITE
-        FILE_SHARE_WRITE,
-        None,
-        OPEN_EXISTING,
-        FILE_FLAGS_AND_ATTRIBUTES(0),
-        None
-    ).expect("Failed to open CONOUT$");
-
-    SetStdHandle(STD_INPUT_HANDLE, c_handle).unwrap();
-    SetStdHandle(STD_ERROR_HANDLE, c_handle).unwrap();
-
-    if reason != 1 {
-        return 1;
-    }
     
+    // Setup console redirection, replacing Love's own implementation.
+    let _ = AllocConsole();
+
+    let stdout = sys::__acrt_iob_func(1);
+    let stderr = sys::__acrt_iob_func(2);
+
+    libc::freopen(s!("CONOUT$").as_ptr() as _,s!("w").as_ptr() as _, stdout as _);
+    libc::freopen(s!("CONOUT$").as_ptr() as _,s!("w").as_ptr() as _, stderr as _);
+
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut opts = Options::new(args.iter().map(String::as_str));
 
