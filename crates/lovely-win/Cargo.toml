@@ -1,0 +1,39 @@
+[package]
+name = "lovely-win"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dwmapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+lovely-core = { version ="*", path = "../lovely-core" }
+
+dirs = "5.0.1"
+getargs = "0.5.0"
+libc = "0.2.153"
+once_cell = "1.19.0"
+widestring = "1.0.2"
+
+[dependencies.retour]
+version = "0.4.0-alpha.1"
+features = ["static-detour"]
+
+[dependencies.windows]
+version = "0.54.0"
+features = [
+    "Win32_System_Console",
+    "Win32_System",
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_Storage_FileSystem",
+    "Win32_UI",
+    "Win32_Security",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[build-dependencies]
+forward-dll = "0.1.13"

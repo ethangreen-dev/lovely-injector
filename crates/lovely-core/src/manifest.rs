@@ -31,7 +31,7 @@ pub struct PatternPatch {
     pub position: PatternAt,
     pub target: String,
     pub payload_files: Option<Vec<String>>,
-    pub payload: Option<String>,
+    pub payload: String,
     pub match_indent: bool,
     pub overwrite: bool,
 }
