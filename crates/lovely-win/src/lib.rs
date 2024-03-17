@@ -1,34 +1,48 @@
+use std::slice;
 use std::ffi::{c_void, CStr, CString};
 use std::fs;
 use std::path::PathBuf;
 
 use getargs::{Arg, Options};
-use libc::FILE;
-use lovely_core::sys::LuaState;
+use lovely_core::sys::{self, LuaState};
 
 use lovely_core::PatchTable;
 use once_cell::sync::OnceCell;
 use retour::static_detour;
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::System::Console::{AllocConsole, GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_OUTPUT_HANDLE};
+use windows::Win32::Foundation::{HINSTANCE, HWND};
+use windows::Win32::System::Console::{
+    AllocConsole, 
+    GetConsoleMode, 
+    GetStdHandle, 
+    SetConsoleMode, 
+    CONSOLE_MODE, 
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING, 
+    STD_OUTPUT_HANDLE
+};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
 static PATCH_TABLE: OnceCell<PatchTable> = OnceCell::new();
 static MOD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
+static HAS_INIT: OnceCell<()> = OnceCell::new();
+
 static_detour! {
     pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32;
 }
 
-#[link(name = "ucrt")]
-extern "C" {
-    pub fn __acrt_iob_func(fileno: u32) -> *mut FILE;
-}
-
 unsafe extern "C" fn lua_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+    // Install native function overrides *once*.
+    if HAS_INIT.get().is_none() {
+        let closure = override_print as *const c_void;
+        sys::lua_pushcclosure(state, closure, 0);
+        sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, b"print\0".as_ptr() as _);
+
+        HAS_INIT.set(()).unwrap();
+    }
+
     let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();    
     let patch_table = PATCH_TABLE.get().unwrap();
 
@@ -63,7 +77,7 @@ unsafe extern "C" fn lua_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const
 
 #[no_mangle]
 #[allow(non_snake_case)]
-unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void) -> u8 {
+unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -> u8 {
     if reason != 1 {
         return 1;
     }
@@ -92,22 +106,24 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
     let mode = mode.0 | ENABLE_VIRTUAL_TERMINAL_PROCESSING.0;
     SetConsoleMode(stdout, CONSOLE_MODE(mode)).unwrap();
 
-    let stdout = __acrt_iob_func(1);
-    let stderr = __acrt_iob_func(2);
-
-    libc::freopen(s!("CONOUT$").as_ptr() as _,s!("w").as_ptr() as _, stdout as _);
-    libc::freopen(s!("CONOUT$").as_ptr() as _,s!("w").as_ptr() as _, stderr as _);
-
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut opts = Options::new(args.iter().map(String::as_str));
 
     let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
+    let mut vanilla = false;
 
     while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
         match opt {
-            Arg::Long("mod-dir") if opts.value().is_ok() => mod_dir = PathBuf::from(opts.value().unwrap()),
+            Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
+            Arg::Long("vanilla") => vanilla = true,
             _ => (),
         }
+    }
+
+    // Stop here if we're runnning in vanilla mode. Don't install hooks, don't setup patches, etc.
+    if vanilla {
+        println!("[LOVELY] Running in vanilla mode");
+        return 1;
     }
 
     if !mod_dir.is_dir() {
@@ -141,4 +157,30 @@ unsafe extern "system" fn DllMain(_: *mut c_void, reason: u32, _: *const c_void)
     .unwrap();
 
     1
+}
+
+/// An override print function, copied piecemeal from the Lua 5.1 source, but in Rust.
+/// # Safety
+/// Native lua API access. It's unsafe, it's unchecked, it will probably eat your firstborn.
+pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
+    let argc = sys::lua_gettop(state);
+
+    for i in 0..argc {
+        let mut str_len = 0_isize; 
+        let arg_str = sys::lua_tolstring(state, -1, &mut str_len);
+        
+        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
+        let arg_str = String::from_utf8(str_buf.to_vec()).unwrap();
+
+        if i > 1 {
+            print!("\t");
+        }
+
+        print!("[GAME]   {arg_str}");
+
+        sys::lua_settop(state, -(1) - 1);
+    }
+    println!();
+
+    0
 }
