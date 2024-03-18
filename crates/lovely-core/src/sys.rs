@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::ffi::{c_void, CString};
 
 use libc::FILE;
 use libloading::{Library, Symbol};
@@ -105,3 +105,33 @@ pub static lua_isstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) 
         LUA_LIB.get(b"lua_isstring").unwrap()
     }
 });
+
+/// Load the provided buffer as a lua module with the specified name.
+/// # Safety
+/// Makes a lot of FFI calls, mutates internal C lua state.
+pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(state: *mut LuaState, name: &str, buffer: &str, lual_loadbuffer: &F) {
+    let buf_cstr = CString::new(buffer).unwrap();
+    let buf_len = buf_cstr.as_bytes().len();
+
+    let p_name = format!("@{name}");
+    let p_name_cstr = CString::new(p_name).unwrap();
+
+    // Push the global package.loaded table onto the top of the stack, saving its index.
+    let stack_top = lua_gettop(state);
+    lua_getfield(state, LUA_GLOBALSINDEX, b"package\0".as_ptr() as _);
+    lua_getfield(state, -1, b"loaded\0".as_ptr() as _);
+
+    // This is the index of the `package.loaded` table.
+    let field_index = lua_gettop(state);
+
+    // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
+    lual_loadbuffer(state, buf_cstr.into_raw() as _, buf_len as _, p_name_cstr.into_raw() as _);
+
+    lua_pcall(state, 0, -1, 0);
+
+    // Insert pcall results onto the package.loaded global table.
+    let module_cstr = CString::new(name).unwrap();
+
+    lua_setfield(state, field_index, module_cstr.into_raw() as _);
+    lua_settop(state, stack_top);
+}

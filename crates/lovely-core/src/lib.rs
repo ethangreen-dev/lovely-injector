@@ -1,10 +1,13 @@
 #![allow(non_upper_case_globals)]
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
+use std::{env, fs};
+use std::path::{Path, PathBuf};
 
-use manifest::Patch;
+use log::*;
+
+use getargs::{Arg, Options};
+use manifest::{Patch, PatchArgs};
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -13,14 +16,19 @@ use crate::manifest::PatchManifest;
 pub mod sys;
 pub mod manifest;
 pub mod patch;
+pub mod hud;
+pub mod log;
 
 type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Sync + Send;
 
 pub struct PatchTable {
+    mod_dir: PathBuf,
     loadbuffer: Option<Box<LoadBuffer>>,
     targets: HashSet<String>,
-    vars: HashMap<String, String>,
     patches: Vec<Patch>,
+    vanilla: bool,
+    vars: HashMap<String, String>,
+    args: HashMap<String, String>,
 }
 
 impl PatchTable {
@@ -29,7 +37,22 @@ impl PatchTable {
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
-        let mod_dirs = fs::read_dir(mod_dir)
+        // Begin by parsing provided command line arguments. We'll parse patch args later.
+        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        let mut opts = Options::new(args.iter().map(String::as_str));
+    
+        let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
+        let mut vanilla = false;
+    
+        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
+            match opt {
+                Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
+                Arg::Long("vanilla") => vanilla = true,
+                _ => (),
+            }
+        }
+
+        let mod_dirs = fs::read_dir(&mod_dir)
             .unwrap_or_else(|e| panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}"))
             .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
@@ -107,10 +130,13 @@ impl PatchTable {
         }
 
         PatchTable {
+            mod_dir: mod_dir.to_path_buf(),
             loadbuffer: None,
             targets,
             vars: var_table,
+            args: HashMap::new(),
             patches,
+            vanilla,
         }
     }
 
@@ -126,6 +152,24 @@ impl PatchTable {
     pub fn needs_patching(&self, target: &str) -> bool {
         let target = target.strip_prefix('@').unwrap_or(target);
         self.targets.contains(target)
+    }
+
+    /// Inject lovely metadata into the game.
+    /// # Safety
+    /// Unsafe due to internal unchecked usages of raw lua state.
+    pub unsafe fn inject_metadata(&self, state: *mut LuaState) {
+        let table = vec![
+            ("mod_dir", self.mod_dir.to_str().unwrap().replace('\\', "/")),
+            ("version", env!("CARGO_PKG_VERSION").to_string()),
+        ];
+
+        let mut code = include_str!("../lovely.lua").to_string();
+        for (field, value) in table {
+            let field = format!("lovely_template:{field}");
+            code = code.replace(&field, &value);
+        }
+
+        sys::load_module(state, "lovely", &code, self.loadbuffer.as_ref().unwrap())
     }
 
     /// Apply one or more patches onto the target's buffer.
@@ -216,14 +260,15 @@ impl PatchTable {
         }
 
         let patched = new_buffer.join("\n");
-        println!("[LOVELY] Applied {patch_count} patches to '{target}'");
+        info!("[LOVELY] Applied {patch_count} patches to '{target}'");
         
         // Compute the integrity hash of the patched file.
         let mut hasher = Sha256::new();
         hasher.update(patched.as_bytes());
         let hash = format!("{:x}", hasher.finalize());
 
-        // Return the patched file with the prepended integrity hash.
-        format!("LOVELY_INTEGRITY = '{hash}'\n\n{patched}")
+        format!(
+            "LOVELY_INTEGRITY = '{hash}'\n\n{patched}"
+        )
     }
 }

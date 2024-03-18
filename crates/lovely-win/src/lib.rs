@@ -1,26 +1,20 @@
+use std::panic;
 use std::slice;
 use std::ffi::{c_void, CStr, CString};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc;
 
-use getargs::{Arg, Options};
+use lovely_core::log::*;
+use lovely_core::{hud, PatchTable};
 use lovely_core::sys::{self, LuaState};
 
-use lovely_core::PatchTable;
+use getargs::{Arg, Options};
 use once_cell::sync::OnceCell;
 use retour::static_detour;
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
-use windows::Win32::System::Console::{
-    AllocConsole, 
-    GetConsoleMode, 
-    GetStdHandle, 
-    SetConsoleMode, 
-    CONSOLE_MODE, 
-    ENABLE_VIRTUAL_TERMINAL_PROCESSING, 
-    STD_OUTPUT_HANDLE
-};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
@@ -34,17 +28,20 @@ static_detour! {
 }
 
 unsafe extern "C" fn lua_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+    let patch_table = PATCH_TABLE.get().unwrap();
+
     // Install native function overrides *once*.
     if HAS_INIT.get().is_none() {
         let closure = override_print as *const c_void;
         sys::lua_pushcclosure(state, closure, 0);
         sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, b"print\0".as_ptr() as _);
 
+        patch_table.inject_metadata(state);
+
         HAS_INIT.set(()).unwrap();
     }
 
     let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();    
-    let patch_table = PATCH_TABLE.get().unwrap();
 
     if !patch_table.needs_patching(name) {
         return LuaLoadbuffer_Detour.call(state, buf_ptr, size, name_ptr);
@@ -84,6 +81,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
  
     std::panic::set_hook(Box::new(|x| unsafe {
         let message = format!("lovely-injector has crashed: \n{x}");
+        error!("{message}");
 
         let message = U16CString::from_str(message);
         MessageBoxW(
@@ -93,18 +91,16 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
             MESSAGEBOX_STYLE(0),
         );
     }));
- 
-    // Setup console redirection, replacing Love's own implementation.
-    let _ = AllocConsole();
 
-    // Enable virtual terminal processing to allow for fancy colored text.
-    let stdout = GetStdHandle(STD_OUTPUT_HANDLE).unwrap();
+    lovely_core::log::init().unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
 
-    let mut mode = CONSOLE_MODE(0);
-    GetConsoleMode(stdout, &mut mode as *mut _).unwrap();
+    // Create the UI
+    let (tx, rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        hud::open(rx);
+    });
 
-    let mode = mode.0 | ENABLE_VIRTUAL_TERMINAL_PROCESSING.0;
-    SetConsoleMode(stdout, CONSOLE_MODE(mode)).unwrap();
+    hud::MSG_TX.set(tx).unwrap();
 
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut opts = Options::new(args.iter().map(String::as_str));
@@ -122,16 +118,16 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     // Stop here if we're runnning in vanilla mode. Don't install hooks, don't setup patches, etc.
     if vanilla {
-        println!("[LOVELY] Running in vanilla mode");
+        info!("Running in vanilla mode");
         return 1;
     }
 
     if !mod_dir.is_dir() {
-        println!("[LOVELY] Creating mods directory at {mod_dir:?}");
+        info!("Creating mods directory at {mod_dir:?}");
         fs::create_dir_all(&mod_dir).unwrap();
     }
 
-    println!("[LOVELY] Using mods directory at {mod_dir:?}");
+    info!("Using mods directory at {mod_dir:?}");
 
     // Patch files are stored within the root of mod subdirectories within the mods dir.
     // - MOD_DIR/lovely.toml
@@ -164,6 +160,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 /// Native lua API access. It's unsafe, it's unchecked, it will probably eat your firstborn.
 pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     let argc = sys::lua_gettop(state);
+    let mut out = String::new();
 
     for i in 0..argc {
         let mut str_len = 0_isize; 
@@ -173,14 +170,14 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
         let arg_str = String::from_utf8(str_buf.to_vec()).unwrap();
 
         if i > 1 {
-            print!("\t");
+            out.push('\t');
         }
 
-        print!("[GAME]   {arg_str}");
-
+        out.push_str(&format!("[GAME] {arg_str}"));
         sys::lua_settop(state, -(1) - 1);
     }
-    println!();
+
+    info!("{out}");
 
     0
 }
