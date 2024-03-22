@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use log::*;
 
-use getargs::{Arg, Options};
-use manifest::{Patch, PatchArgs};
+use getargs::Options;
+use manifest::Patch;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -16,7 +16,6 @@ use crate::manifest::PatchManifest;
 pub mod sys;
 pub mod manifest;
 pub mod patch;
-pub mod hud;
 pub mod log;
 
 type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Sync + Send;

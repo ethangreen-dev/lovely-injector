@@ -3,10 +3,9 @@ use std::slice;
 use std::ffi::{c_void, CStr, CString};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::mpsc;
 
 use lovely_core::log::*;
-use lovely_core::{hud, PatchTable};
+use lovely_core::PatchTable;
 use lovely_core::sys::{self, LuaState};
 
 use getargs::{Arg, Options};
@@ -15,6 +14,7 @@ use retour::static_detour;
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
+use windows::Win32::System::Console::AllocConsole;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
@@ -92,15 +92,9 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
+    let _ = AllocConsole();
+
     lovely_core::log::init().unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
-
-    // Create the UI
-    let (tx, rx) = mpsc::channel::<String>();
-    std::thread::spawn(move || {
-        hud::open(rx);
-    });
-
-    hud::MSG_TX.set(tx).unwrap();
 
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut opts = Options::new(args.iter().map(String::as_str));

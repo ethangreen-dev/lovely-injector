@@ -5,9 +5,6 @@ edition = "2021"
 
 [dependencies]
 dirs = "5.0.1"
-egui_sdl2_gl = { version = "0.26.2", features = ["use_epi"] }
-egui = "0.26.2"
-epi = "0.17.0"
 getargs = "0.5.0"
 libc = "0.2.153"
 libloading = "0.8.3"

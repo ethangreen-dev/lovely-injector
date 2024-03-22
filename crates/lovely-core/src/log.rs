@@ -3,16 +3,12 @@ pub use log::{info, error, warn, debug, trace, LevelFilter};
 
 use log::{Level, Log, Metadata, Record, SetLoggerError};
 
-use crate::hud::MSG_TX;
-
 static LOGGER: LovelyLogger = LovelyLogger {
-    use_console: false,
-    use_hud: true,
+    use_console: true,
 };
 
 struct LovelyLogger {
     use_console: bool,
-    use_hud: bool,
 }
 
 impl Log for LovelyLogger {
@@ -28,14 +24,6 @@ impl Log for LovelyLogger {
         let msg = format!("{} - {}", record.level(), record.args());
         if self.use_console {
             println!("{msg}");
-        }
-
-        if self.use_hud {
-            MSG_TX
-                .get()
-                .unwrap()
-                .send(msg)
-                .expect("Failed to pump hud log message");
         }
     }
 

@@ -13,7 +13,6 @@ lovely-core = { version ="*", path = "../lovely-core" }
 libc = "0.2.141"
 once_cell = "1.19.0"
 widestring = "1.0.2"
-hudhook = "0.6.5"
 getargs = "0.5.0"
 dirs = "5.0.1"
 
