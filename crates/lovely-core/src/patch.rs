@@ -57,12 +57,12 @@ impl PatternPatch {
     /// The return value will be Option::Some when the given line was prepended or appended onto.
     /// The vec contains a series of lines that will be inserted in-place, replacing the provided line.
     /// If Option::None, the line itself may or may not have been mutated.
-    pub fn apply(&self, line: &mut String) -> Option<(Vec<String>, Vec<String>)> {
+    pub fn apply(&self, target: &str, line: &mut String) -> Option<(Vec<String>, Vec<String>)> {
         let trimmed = line.trim();
         let is_match = WildMatch::new(&self.pattern).matches(trimmed);
 
         // Stop here if there's no match on this line.
-        if !is_match {
+        if !is_match || self.target != target {
             return None;
         }
 

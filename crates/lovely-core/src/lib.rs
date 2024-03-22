@@ -40,16 +40,7 @@ impl PatchTable {
         let args = std::env::args().skip(1).collect::<Vec<_>>();
         let mut opts = Options::new(args.iter().map(String::as_str));
     
-        let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
         let mut vanilla = false;
-    
-        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
-            match opt {
-                Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
-                Arg::Long("vanilla") => vanilla = true,
-                _ => (),
-            }
-        }
 
         let mod_dirs = fs::read_dir(&mod_dir)
             .unwrap_or_else(|e| panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}"))
@@ -235,7 +226,7 @@ impl PatchTable {
 
             // Apply pattern patches to each line.
             for patch in &pattern_patches {
-                let patched = patch.apply(line);
+                let patched = patch.apply(target, line);
                 new_line = line.to_string();
 
                 // Yes, we are nesting too much here.
