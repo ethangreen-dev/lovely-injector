@@ -32,7 +32,6 @@ unsafe extern "C" fn luaL_loadbuffer(state: *mut LuaState, buf_ptr: *const u8, s
     let patch_table = PATCH_TABLE.get().unwrap();
     
     if !patch_table.needs_patching(name) {
-        println!("Skipping patching for {name}");
         return RECALL(state, buf_ptr, size, name_ptr);
     }
 
