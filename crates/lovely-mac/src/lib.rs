@@ -87,7 +87,7 @@ fn construct() {
     // - MOD_DIR/lovely/*.toml
 
     let patch_table = PatchTable::load(&mod_dir)
-        .with_loadbuffer(|a, b, c, d| unsafe { luaL_loadbuffer(a, b, c, d) });
+        .with_loadbuffer(|a, b, c, d| unsafe { RECALL(a, b, c, d) });
 
     PATCH_TABLE.set(patch_table).unwrap_or_else(|_| panic!("Failed to init PATCH_TABLE static"));
     MOD_DIR.set(mod_dir).unwrap();
