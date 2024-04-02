@@ -11,16 +11,33 @@ pub const LUA_TBOOLEAN: isize = 1;
 
 pub type LuaState = c_void;
 
+#[cfg(target_os = "windows")]
 #[link(name = "ucrt")]
 extern "C" {
     pub fn __acrt_iob_func(fileno: u32) -> *mut FILE;
 }
 
-static LUA_LIB: Lazy<Library> = Lazy::new(|| {
+#[cfg(target_os = "macos")]
+#[link(name = "c")]
+extern "C" {
+    pub fn __acrt_iob_func(fileno: u32) -> *mut FILE;
+}
+
+
+#[cfg(target_os = "Windows")]
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
     unsafe {
         Library::new("lua51.dll").unwrap()
     }
 });
+
+#[cfg(target_os = "macos")]
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
+    unsafe {
+        Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
+    }
+});
+
 
 pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> = Lazy::new(|| {
     unsafe {
@@ -110,6 +127,7 @@ pub static lua_isstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) 
 /// # Safety
 /// Makes a lot of FFI calls, mutates internal C lua state.
 pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(state: *mut LuaState, name: &str, buffer: &str, lual_loadbuffer: &F) {
+    println!("Loading module {name}");
     let buf_cstr = CString::new(buffer).unwrap();
     let buf_len = buf_cstr.as_bytes().len();
 

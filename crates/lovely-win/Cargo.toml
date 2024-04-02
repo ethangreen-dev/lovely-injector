@@ -35,5 +35,7 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
-[build-dependencies]
-forward-dll = "0.1.13"
+[build-dependencies.forward-dll]
+version = "0.1.13"
+optional = true
+
