@@ -12,14 +12,25 @@ static PATCH_TABLE: OnceCell<PatchTable> = OnceCell::new();
 static MOD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
 static RECALL: Lazy<unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32> = Lazy::new(|| unsafe {
-    let ptr = libc::dlsym(libc::RTLD_NEXT, b"luaL_loadbuffer\0".as_ptr() as _);
+    let handle = libc::dlopen(b"../Frameworks/Lua.framework/Versions/A/Lua\0".as_ptr() as _, libc::RTLD_LAZY);
+    
+    if handle.is_null() {
+        panic!("Failed to load lua");
+    }
+    let ptr = libc::dlsym(handle, b"luaL_loadbuffer\0".as_ptr() as _);
+    
+    if ptr.is_null() {
+        panic!("Failed to load luaL_loadbuffer");
+    }
     std::mem::transmute::<_, unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(ptr)
+    
 });
 
-unsafe extern "C" fn luaL_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
-    let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();    
+#[no_mangle]
+unsafe extern "C" fn luaL_loadbuffer(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+    let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();
     let patch_table = PATCH_TABLE.get().unwrap();
-
+    
     if !patch_table.needs_patching(name) {
         return RECALL(state, buf_ptr, size, name_ptr);
     }
@@ -51,11 +62,11 @@ unsafe extern "C" fn luaL_loadbuffer_detour(state: *mut LuaState, buf_ptr: *cons
 
 // Mark this function as a global constructor (like C++).
 #[ctor::ctor]
-fn construct() { 
+fn construct() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut opts = Options::new(args.iter().map(String::as_str));
 
-    let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
+    let mut mod_dir = dirs::config_dir().unwrap().join("Balatro/Mods");
 
     while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
         match opt {
@@ -81,4 +92,3 @@ fn construct() {
     PATCH_TABLE.set(patch_table).unwrap_or_else(|_| panic!("Failed to init PATCH_TABLE static"));
     MOD_DIR.set(mod_dir).unwrap();
 }
-

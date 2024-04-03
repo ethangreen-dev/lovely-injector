@@ -1,4 +1,5 @@
 fn main() {
+    #[cfg(target_os = "windows")]
     forward_dll::forward_dll_with_exports(
         "C:\\Windows\\System32\\dwmapi.dll", 
         &[

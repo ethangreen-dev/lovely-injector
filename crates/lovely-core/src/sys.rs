@@ -11,16 +11,21 @@ pub const LUA_TBOOLEAN: isize = 1;
 
 pub type LuaState = c_void;
 
-#[link(name = "ucrt")]
-extern "C" {
-    pub fn __acrt_iob_func(fileno: u32) -> *mut FILE;
-}
 
-static LUA_LIB: Lazy<Library> = Lazy::new(|| {
+#[cfg(target_os = "windows")]
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
     unsafe {
         Library::new("lua51.dll").unwrap()
     }
 });
+
+#[cfg(target_os = "macos")]
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
+    unsafe {
+        Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
+    }
+});
+
 
 pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> = Lazy::new(|| {
     unsafe {
