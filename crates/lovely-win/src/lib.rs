@@ -3,6 +3,7 @@ use std::slice;
 use std::ffi::{c_void, CStr, CString};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Once;
 
 use lovely_core::log::*;
 use lovely_core::PatchTable;
@@ -21,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 static PATCH_TABLE: OnceCell<PatchTable> = OnceCell::new();
 static MOD_DIR: OnceCell<PathBuf> = OnceCell::new();
 
-static HAS_INIT: OnceCell<()> = OnceCell::new();
+static INIT: Once = Once::new();
 
 static_detour! {
     pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32;
@@ -31,15 +32,13 @@ unsafe extern "C" fn lua_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const
     let patch_table = PATCH_TABLE.get().unwrap();
 
     // Install native function overrides *once*.
-    if HAS_INIT.get().is_none() {
-        let closure = override_print as *const c_void;
+    INIT.call_once(|| {
+        let closure = sys::override_print as *const c_void;
         sys::lua_pushcclosure(state, closure, 0);
         sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, b"print\0".as_ptr() as _);
 
         patch_table.inject_metadata(state);
-
-        HAS_INIT.set(()).unwrap();
-    }
+    });
 
     let name = CStr::from_ptr(name_ptr as _).to_str().unwrap();    
 
@@ -147,31 +146,4 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     .unwrap();
 
     1
-}
-
-/// An override print function, copied piecemeal from the Lua 5.1 source, but in Rust.
-/// # Safety
-/// Native lua API access. It's unsafe, it's unchecked, it will probably eat your firstborn.
-pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
-    let argc = sys::lua_gettop(state);
-    let mut out = String::new();
-
-    for i in 0..argc {
-        let mut str_len = 0_isize; 
-        let arg_str = sys::lua_tolstring(state, -1, &mut str_len);
-        
-        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
-        let arg_str = String::from_utf8(str_buf.to_vec()).unwrap();
-
-        if i > 1 {
-            out.push('\t');
-        }
-
-        out.push_str(&format!("[GAME] {arg_str}"));
-        sys::lua_settop(state, -(1) - 1);
-    }
-
-    info!("{out}");
-
-    0
 }
