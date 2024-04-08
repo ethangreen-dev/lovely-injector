@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "dwmapi"
+name = "version"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -37,5 +37,3 @@ features = [
 
 [build-dependencies.forward-dll]
 version = "0.1.13"
-optional = true
-
