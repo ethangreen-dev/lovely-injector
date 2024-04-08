@@ -5,7 +5,7 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 ## Manual Installation
 
 1. Download the latest release.
-2. Open the .zip archive, copy `dwmapi.dll` into the game directory. You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
+2. Open the .zip archive, copy `version.dll` into the game directory. You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 3. Install one or more mods into `%AppData%/Balatro/Mods`.
 4. Run the game.
 
