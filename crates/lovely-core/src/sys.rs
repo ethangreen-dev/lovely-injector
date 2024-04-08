@@ -1,7 +1,8 @@
-use std::ffi::{c_void, CString};
+use std::{ffi::{c_void, CString}, slice};
 
 use libc::FILE;
 use libloading::{Library, Symbol};
+use log::info;
 use once_cell::sync::Lazy;
 
 pub const LUA_GLOBALSINDEX: isize = -10002;
@@ -139,4 +140,31 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u
 
     lua_setfield(state, field_index, module_cstr.into_raw() as _);
     lua_settop(state, stack_top);
+}
+
+/// An override print function, copied piecemeal from the Lua 5.1 source, but in Rust.
+/// # Safety
+/// Native lua API access. It's unsafe, it's unchecked, it will probably eat your firstborn.
+pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
+    let argc = lua_gettop(state);
+    let mut out = String::new();
+
+    for i in 0..argc {
+        let mut str_len = 0_isize; 
+        let arg_str = lua_tolstring(state, -1, &mut str_len);
+        
+        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
+        let arg_str = String::from_utf8_lossy(str_buf);
+
+        if i > 1 {
+            out.push('\t');
+        }
+
+        out.push_str(&format!("[GAME] {arg_str}"));
+        lua_settop(state, -(1) - 1);
+    }
+
+    info!("{out}");
+
+    0
 }
