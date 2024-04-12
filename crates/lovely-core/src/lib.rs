@@ -1,12 +1,17 @@
 #![allow(non_upper_case_globals)]
 
+use core::slice;
 use std::collections::{HashMap, HashSet};
+use std::ffi::{CStr, CString};
+use std::os::raw::c_void;
+use std::sync::Once;
+use std::time::Instant;
 use std::{env, fs};
 use std::path::{Path, PathBuf};
 
 use log::*;
 
-use getargs::Options;
+use getargs::{Arg, Options};
 use manifest::Patch;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
@@ -18,14 +23,133 @@ pub mod manifest;
 pub mod patch;
 pub mod log;
 
-type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Sync + Send;
+type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Send + Sync + 'static;
 
+pub struct Lovely {
+    pub mod_dir: PathBuf,
+    pub is_vanilla: bool,
+    loadbuffer: &'static LoadBuffer,
+    patch_table: PatchTable,
+    rt_init: Once,
+}
+
+impl Lovely {
+    /// Initialize the Lovely patch runtime.
+    pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
+        let start = Instant::now();
+
+        log::init().unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
+
+        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        let mut opts = Options::new(args.iter().map(String::as_str));
+    
+        let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
+        let mut is_vanilla = false;
+    
+        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
+            match opt {
+                Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
+                Arg::Long("vanilla") => is_vanilla = true,
+                _ => (),
+            }
+        }
+
+        // Stop here if we're running in vanilla mode.
+        if is_vanilla {
+            info!("Running in vanilla mode");
+
+            return Lovely {
+                mod_dir,
+                is_vanilla,
+                loadbuffer,
+                patch_table: Default::default(),
+                rt_init: Once::new(),
+            };
+        }
+    
+        if !mod_dir.is_dir() {
+            info!("Creating mods directory at {mod_dir:?}");
+            fs::create_dir_all(&mod_dir).unwrap();
+        }
+    
+        info!("Using mod directory at {mod_dir:?}");
+        let patch_table = PatchTable::load(&mod_dir)
+            .with_loadbuffer(loadbuffer);
+        
+        info!("Lovely initialization complete in {}ms", start.elapsed().as_millis());
+
+        Lovely {
+            mod_dir,
+            is_vanilla,
+            loadbuffer,
+            patch_table,
+            rt_init: Once::new(),
+        }
+    }
+
+    /// Apply patches onto the raw buffer.
+    /// 
+    /// # Safety
+    /// This function is unsafe because
+    /// - It interacts and manipulates memory directly through native pointers
+    /// - It interacts, calls, and mutates native lua state through native pointers
+    pub unsafe fn apply_buffer_patches(&self, state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+        // Install native function overrides.
+        self.rt_init.call_once(|| {
+            let closure = sys::override_print as *const c_void;
+            sys::lua_pushcclosure(state, closure, 0);
+            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, b"print\0".as_ptr() as _);
+
+            // Inject Lovely functions into the runtime.
+            self.patch_table.inject_metadata(state);
+        });
+
+        let name = CStr::from_ptr(name_ptr as _).to_str()
+            .unwrap_or_else(|e| panic!("The byte sequence at {name_ptr:x?} is not a valid UTF-8 string: {e:?}"));
+
+        // Stop here if no valid patch exists for this target.
+        if !self.patch_table.needs_patching(name) {
+            return (self.loadbuffer)(state, buf_ptr, size, name_ptr);
+        }
+
+        // Convert the buffer from cstr ptr, to byte slice, to utf8 str.
+        let buf = slice::from_raw_parts(buf_ptr, (size - 1) as _);
+        let buf_str = CString::new(buf)
+            .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains a non-terminating null char: {e:?}"));
+        let buf_str = buf_str.to_str()
+            .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}"));
+
+        let patched = self.patch_table.apply_patches(name, buf_str, state);
+
+        let patch_dump = self.mod_dir
+            .join("lovely")
+            .join("dump")
+            .join(name);
+
+        let dump_parent = patch_dump.parent().unwrap();
+        if !dump_parent.is_dir() {
+            fs::create_dir_all(dump_parent).unwrap();
+        }
+
+        // Write the patched file to the dump, moving on if an error occurs.
+        if let Err(e) = fs::write(&patch_dump, &patched) {
+            error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
+        }
+
+        let raw = CString::new(patched).unwrap();
+        let raw_size = raw.as_bytes().len();
+        let raw_ptr = raw.into_raw();
+
+        (self.loadbuffer)(state, raw_ptr as _, raw_size as _, name_ptr)
+    }
+}
+
+#[derive(Default)]
 pub struct PatchTable {
     mod_dir: PathBuf,
-    loadbuffer: Option<Box<LoadBuffer>>,
+    loadbuffer: Option<&'static LoadBuffer>,
     targets: HashSet<String>,
     patches: Vec<Patch>,
-    vanilla: bool,
     vars: HashMap<String, String>,
     args: HashMap<String, String>,
 }
@@ -36,13 +160,7 @@ impl PatchTable {
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
-        // Begin by parsing provided command line arguments. We'll parse patch args later.
-        let args = std::env::args().skip(1).collect::<Vec<_>>();
-        let mut opts = Options::new(args.iter().map(String::as_str));
-    
-        let mut vanilla = false;
-
-        let mod_dirs = fs::read_dir(&mod_dir)
+        let mod_dirs = fs::read_dir(mod_dir)
             .unwrap_or_else(|e| panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}"))
             .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
@@ -126,14 +244,13 @@ impl PatchTable {
             vars: var_table,
             args: HashMap::new(),
             patches,
-            vanilla,
         }
     }
 
     /// Set an override for lual_loadbuffer.
-    pub fn with_loadbuffer<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Sync + Send + 'static>(self, loadbuffer: F) -> Self {
+    pub fn with_loadbuffer(self, loadbuffer: &'static LoadBuffer) -> Self {
         PatchTable {
-            loadbuffer: Some(Box::new(loadbuffer)),
+            loadbuffer: Some(loadbuffer),
             ..self
         }
     }
