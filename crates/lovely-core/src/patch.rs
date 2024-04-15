@@ -124,8 +124,6 @@ impl PatternPatch {
     }
 
     pub fn apply_complex(&self, target: &str, rope: &mut Rope) -> bool {
-        println!("{target}");
-
         if self.target != target {
             return false;
         }
@@ -174,8 +172,11 @@ impl PatternPatch {
                 &mut payload
             );
 
-            rope.remove(base_start..base_end);
-            rope.insert(base_start, &payload);
+            let char_start = rope.byte_to_char(base_start);
+            let char_end = rope.byte_to_char(base_end);
+
+            rope.remove(char_start..char_end);
+            rope.insert(char_start, &payload);
 
             let new_len = payload.len();
             let old_len = base.end - base.start;
