@@ -4,7 +4,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use once_cell::sync::Lazy;
-use regex_lite::Regex;
+use regex_cursor::engines::meta::Regex;
+use regex_cursor::regex_automata::util::interpolate;
+use regex_cursor::regex_automata::util::syntax::Config;
+use regex_cursor::{Input, IntoCursor};
+use ropey::Rope;
 use wildmatch::WildMatch;
 
 use crate::manifest::{CopyAt, CopyPatch, ModulePatch, PatternAt, PatternPatch};
@@ -34,71 +38,152 @@ fn set_cached_file(path: &PathBuf) -> &String {
 /// Interpolation targets are of form {{lovely:VAR_NAME}}.
 pub fn apply_var_interp(line: &mut String, vars: &HashMap<String, String>) {
     // Cache the compiled regex.
-    let re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{lovely:(\w+)\}\}").unwrap());
+    // let re: Lazy<regex_lite::Regex> = Lazy::new(|| regex_lite::Regex::new(r"\{\{lovely:(\w+)\}\}").unwrap());
     
-    let line_copy = line.to_string();
-    let captures = re
-        .captures_iter(&line_copy).map(|x| x.extract());
+    // let line_copy = line.to_string();
+    // let captures = re
+    //     .captures_iter(&line_copy).map(|x| x.extract());
 
-    for (cap, [var]) in captures {
-        let Some(val) = vars.get(var) else {
-            panic!("Failed to interpolate an unregistered variable '{var}'");
-        };
+    // for (cap, [var]) in captures {
+    //     let Some(val) = vars.get(var) else {
+    //         panic!("Failed to interpolate an unregistered variable '{var}'");
+    //     };
 
-        // This clones the string each time, not efficient. A more efficient solution
-        // would be to use something like mem::take to interpolate the string in-place,
-        // but the complexity would not be worth the performance gain.
-        *line = line.replace(cap, val);
-    }
+    //     // This clones the string each time, not efficient. A more efficient solution
+    //     // would be to use something like mem::take to interpolate the string in-place,
+    //     // but the complexity would not be worth the performance gain.
+    //     *line = line.replace(cap, val);
+    // }
 }
 
 impl PatternPatch {
-    /// Apply the pattern patch onto the provided line.
-    /// The return value will be Option::Some when the given line was prepended or appended onto.
-    /// The vec contains a series of lines that will be inserted in-place, replacing the provided line.
-    /// If Option::None, the line itself may or may not have been mutated.
-    pub fn apply(&self, target: &str, line: &mut String) -> Option<(Vec<String>, Vec<String>)> {
-        let trimmed = line.trim();
-        let is_match = WildMatch::new(&self.pattern).matches(trimmed);
-
-        // Stop here if there's no match on this line.
-        if !is_match || self.target != target {
-            return None;
+    /// Apply the pattern patch onto the rope.
+    /// The return value will be `true` if the rope was modified.
+    pub fn apply(&self, target: &str, rope: &mut Rope) -> bool {
+        if self.target != target {
+            return false;
         }
 
-        // Determine the indent of the provided line. If an indent is not requested use an empty one.
-        let indent = if self.match_indent {
-            line.chars().take_while(|x| *x == ' ' || *x == '\t').collect::<String>()
-        } else {
-            String::new()
-        };
+        let wm = WildMatch::new(&self.pattern);
+        let matches = rope
+            .lines()
+            .enumerate()
+            .map(|(i, line)| (i, line.to_string()))
+            .filter(|(_, line)| wm.matches(line.trim()))
+            .collect::<Vec<(_, _)>>();
 
-        // If we're replacing *only* the provided line then we stop here, no need for added allocs.
-        if matches!(self.position, PatternAt::At) {
-            *line = format!("{indent}{}", self.payload);
-            return None;
+        if matches.is_empty() {
+            return false;
         }
 
-        let mut payload_lines = self.payload.split('\n')
-            .map(|x| format!("{indent}{x}"))
-            .collect::<Vec<_>>();
+        // Track the +/- index offset caused by previous line injections.
+        let mut line_delta = 0;
 
-        let mut before = vec![];
-        let mut after = vec![];
+        for (line_idx, line) in matches {
+            let start = rope.line_to_byte(line_idx) + line_delta;
+            let end = start + line.len();
+            let payload_lines = self.payload.lines().count();
 
-        // Insert the payload into position in the output vec either *before* or *after*
-        // the provided line.
-        match self.position {
-            PatternAt::Before => {
-                before.append(&mut payload_lines);
-            }
-            PatternAt::After => {
-                after.append(&mut payload_lines);
-            }
-            _ => unreachable!()
+            let indent = if self.match_indent {
+                line.chars().take_while(|x| *x == ' ' || *x == '\t').collect::<String>()
+            } else {
+                String::new()
+            };
+
+            let payload = self.payload.split('\n')
+                .map(|x| format!("{indent}{x}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let newline = if self.payload.ends_with('\n') {
+                ""
+            } else {
+                "\n"
+            };
+
+            let replace = match self.position {
+                PatternAt::Before => { 
+                    line_delta += payload_lines;
+                    format!("{}{newline}{line}", payload)
+                }
+                PatternAt::After => {
+                    line_delta += payload_lines;
+                    format!("{line}{}{newline}", payload)
+                }
+                PatternAt::At => {
+                    line_delta += payload_lines - 1;
+                    format!("{indent}{}{newline}", payload)
+                }
+            };
+
+            rope.remove(start..end);
+            rope.insert(start, &replace);
         }
 
-        Some((before, after))
+        true
+    }
+
+    pub fn apply_complex(&self, target: &str, rope: &mut Rope) -> bool {
+        println!("{target}");
+
+        if self.target != target {
+            return false;
+        }
+
+        let input = Input::new(rope.into_cursor());
+        let re = Regex::new(&self.pattern)
+            .unwrap_or_else(|e| panic!("Failed to compile Regex pattern '{}': {e:?}", self.pattern));
+
+        let captures = re.captures_iter(input).collect::<Vec<_>>();
+        if captures.is_empty() {
+            log::info!("Regex query '{}' on target '{target}' did not result in any matches", self.pattern);
+            return false;
+        }
+
+        // This is our running byte offset. We use this to ensure that byte references
+        // within the capture group remain valid even after the rope has been mutated.
+        let mut delta = 0_isize;
+
+        for groups in captures {
+            // Get the entire captured span (index 0);
+            let base = groups.get_group(0).unwrap();
+            let base_start = (base.start as isize + delta) as usize;
+            let base_end = (base.end as isize + delta) as usize;
+
+            let base_str = rope.get_byte_slice(base_start..base_end).unwrap().to_string();
+
+            // Interpolate capture groups into the payload.
+            // We must use this method instead of Captures::interpolate_string because that
+            // implementation seems to be broken when working with ropes.
+            let mut payload = String::new();
+            interpolate::string(
+                &self.payload,
+                |index, dest| {
+                    let span = groups.get_group(index).unwrap();
+                    let start = (span.start as isize + delta) as usize;
+                    let end = (span.end as isize + delta) as usize;
+
+                    let rope_slice = rope.get_byte_slice(start..end).unwrap();
+
+                    dest.push_str(&rope_slice.to_string());
+                },
+                |name| {
+                    let pid = groups.pattern().unwrap();
+                    groups.group_info().to_index(pid, name)
+                },
+                &mut payload
+            );
+
+            rope.remove(base_start..base_end);
+            rope.insert(base_start, &payload);
+
+            let new_len = payload.len();
+            let old_len = base.end - base.start;
+
+            delta += new_len as isize - old_len as isize;
+        }
+
+        true
     }
 }
 

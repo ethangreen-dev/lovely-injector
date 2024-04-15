@@ -13,6 +13,7 @@ use log::*;
 
 use getargs::{Arg, Options};
 use manifest::Patch;
+use ropey::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -335,31 +336,45 @@ impl PatchTable {
         }
 
         // Allocate a new buffer. We'll fill this out as we apply line-based patches.
-        let mut new_buffer: Vec<String> = Vec::new();
-        for line in lines.iter_mut() {
-            let mut before_lines: Vec<String> = vec![];
-            let mut after_lines: Vec<String> = vec![];
-            let mut new_line = line.to_string();
+        let buf = lines.join("\n");
+        let mut rope = Rope::from_str(&buf);
 
-            // Apply pattern patches to each line.
-            for patch in &pattern_patches {
-                let patched = patch.apply(target, line);
-                new_line = line.to_string();
-
-                // Yes, we are nesting too much here.
-                if patched.is_none() {
-                    continue;
-                }
-
-                let (mut before, mut after) = patched.unwrap();
-                before_lines.append(&mut before);
-                after_lines.append(&mut after);
+        for patch in pattern_patches.iter() {
+            if patch.complex {
+                patch.apply_complex(target, &mut rope);
+            } else {
+                patch.apply(target, &mut rope);
             }
-
-            new_buffer.append(&mut before_lines);
-            new_buffer.push(new_line);
-            new_buffer.append(&mut after_lines);
         }
+
+        // for line in lines.iter_mut() {
+        //     let mut before_lines: Vec<String> = vec![];
+        //     let mut after_lines: Vec<String> = vec![];
+        //     let mut new_line = line.to_string();
+
+        //     // Apply pattern patches to each line.
+        //     for patch in pattern_patches.iter().filter(|x| !x.complex) {
+        //         let patched = patch.apply(target, line);
+        //         new_line = line.to_string();
+
+        //         // Yes, we are nesting too much here.
+        //         if patched.is_none() {
+        //             continue;
+        //         }
+
+        //         let (mut before, mut after) = patched.unwrap();
+        //         before_lines.append(&mut before);
+        //         after_lines.append(&mut after);
+        //     }
+
+        //     new_buffer.append(&mut before_lines);
+        //     new_buffer.push(new_line);
+        //     new_buffer.append(&mut after_lines);
+        // }
+
+        let new_buffer = rope.to_string();
+        let mut new_buffer = new_buffer.split('\n').map(String::from).collect::<Vec<String>>();
+
 
         // Apply variable interpolation.
         for line in new_buffer.iter_mut() {

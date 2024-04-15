@@ -76,6 +76,11 @@ pub struct PatternPatch {
     pub payload: String,
     pub match_indent: bool,
     pub overwrite: bool,
+
+    // Enable the regex pattern match / substitution engine.
+    // Queries can be tested here: https://rustexp.lpil.uk/
+    #[serde(default)]
+    pub complex: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
