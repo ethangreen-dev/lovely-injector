@@ -1,6 +1,11 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
+
+use crate::patch::copy::CopyPatch;
+use crate::patch::module::ModulePatch;
+use crate::patch::pattern::PatternPatch;
+use crate::patch::regex::RegexPatch;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Manifest {
@@ -57,58 +62,7 @@ pub enum Patch {
     // A patch which applies some change to a series of line(s) after a line with a match
     // to the provided pattern has been found.
     Pattern(PatternPatch),
+    Regex(RegexPatch),
     Copy(CopyPatch),
     Module(ModulePatch),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PatternPatch {
-    // The pattern that the line will be matched against. Very simple,
-    // supports only `?` (one occurance of any character) and `*` (any numver of any character).
-    // Patterns are matched against a left-trimmed version of the line, so whitespace does not
-    // need to be considered.
-    pub pattern: String,
-
-    // The position to insert the target at. `PatternAt::At` replaces the matched line entirely.
-    pub position: PatternAt,
-    pub target: String,
-    pub payload_files: Option<Vec<String>>,
-    pub payload: String,
-    pub match_indent: bool,
-    pub overwrite: bool,
-
-    // Enable the regex pattern match / substitution engine.
-    // Queries can be tested here: https://rustexp.lpil.uk/
-    #[serde(default)]
-    pub complex: bool,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-pub enum PatternAt {
-    At,
-    Before,
-    After,
-}
-
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CopyPatch {
-    pub position: CopyAt,
-    pub target: String,
-    pub sources: Vec<PathBuf>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-pub enum CopyAt {
-    Append,
-    Prepend,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ModulePatch {
-    pub source: PathBuf,
-    pub before: String,
-    pub name: String,
 }

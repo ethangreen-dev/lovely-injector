@@ -21,8 +21,8 @@ use crate::manifest::PatchManifest;
 
 pub mod sys;
 pub mod manifest;
-pub mod patch;
 pub mod log;
+pub mod patch;
 
 type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Send + Sync + 'static;
 
@@ -230,6 +230,9 @@ impl PatchTable {
                     Patch::Pattern(x) => {
                         targets.insert(x.target.clone());
                     }
+                    Patch::Regex(x) => {
+                        targets.insert(x.target.clone());
+                    }
                 }
             }
 
@@ -310,9 +313,18 @@ impl PatchTable {
                 _ => None
             })
             .collect::<Vec<_>>();
+        let regex_patches = self
+            .patches
+            .iter()
+            .filter_map(|x| match x {
+                Patch::Regex(patch) => Some(patch),
+                _ => None
+            })
+            .collect::<Vec<_>>();
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
+        let mut rope = Rope::from_str(buffer);
 
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.as_ref().unwrap();
@@ -327,62 +339,39 @@ impl PatchTable {
         }
 
         // Apply copy patches.
-        let mut lines = buffer.lines().map(String::from).collect::<Vec<_>>();
         for patch in copy_patches {
-            let result = patch.apply(target, &mut lines);
-            if result {
+            if patch.apply(target, &mut rope) {
                 patch_count += 1;
             }
         }
 
-        // Allocate a new buffer. We'll fill this out as we apply line-based patches.
-        let buf = lines.join("\n");
-        let mut rope = Rope::from_str(&buf);
-
-        for patch in pattern_patches.iter() {
-            if patch.complex {
-                patch.apply_complex(target, &mut rope);
-            } else {
-                patch.apply(target, &mut rope);
+        for patch in pattern_patches {
+            if patch.apply(target, &mut rope) {
+                patch_count += 1;
             }
         }
 
-        // for line in lines.iter_mut() {
-        //     let mut before_lines: Vec<String> = vec![];
-        //     let mut after_lines: Vec<String> = vec![];
-        //     let mut new_line = line.to_string();
-
-        //     // Apply pattern patches to each line.
-        //     for patch in pattern_patches.iter().filter(|x| !x.complex) {
-        //         let patched = patch.apply(target, line);
-        //         new_line = line.to_string();
-
-        //         // Yes, we are nesting too much here.
-        //         if patched.is_none() {
-        //             continue;
-        //         }
-
-        //         let (mut before, mut after) = patched.unwrap();
-        //         before_lines.append(&mut before);
-        //         after_lines.append(&mut after);
-        //     }
-
-        //     new_buffer.append(&mut before_lines);
-        //     new_buffer.push(new_line);
-        //     new_buffer.append(&mut after_lines);
-        // }
+        for patch in regex_patches {
+            if patch.apply(target, &mut rope) {
+                patch_count += 1;
+            }
+        }  
 
         let new_buffer = rope.to_string();
-        let mut new_buffer = new_buffer.split('\n').map(String::from).collect::<Vec<String>>();
-
+        let new_buffer = new_buffer.split('\n').map(String::from).collect::<Vec<String>>();
 
         // Apply variable interpolation.
-        for line in new_buffer.iter_mut() {
-            patch::apply_var_interp(line, &self.vars);
-        }
+        // for line in new_buffer.iter_mut() {
+        //     patch_old::apply_var_interp(line, &self.vars);
+        // }
 
         let patched = new_buffer.join("\n");
-        info!("[LOVELY] Applied {patch_count} patches to '{target}'");
+
+        if patch_count == 1 {
+            info!("[LOVELY] Applied 1 patch to '{target}'");
+        } else {
+            info!("[LOVELY] Applied {patch_count} patches to '{target}'");
+        }
         
         // Compute the integrity hash of the patched file.
         let mut hasher = Sha256::new();
