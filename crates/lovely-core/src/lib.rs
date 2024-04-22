@@ -76,6 +76,13 @@ impl Lovely {
         info!("Using mod directory at {mod_dir:?}");
         let patch_table = PatchTable::load(&mod_dir)
             .with_loadbuffer(loadbuffer);
+
+        let dump_dir = mod_dir.join("lovely").join("dump");
+        if dump_dir.is_dir() {
+            info!("Cleaning up dumps directory at {dump_dir:?}");
+            fs::remove_dir_all(&dump_dir)
+                .unwrap_or_else(|e| panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}"));
+        }
         
         info!("Lovely initialization complete in {}ms", start.elapsed().as_millis());
 
@@ -125,7 +132,7 @@ impl Lovely {
         let patch_dump = self.mod_dir
             .join("lovely")
             .join("dump")
-            .join(name);
+            .join(name.replace('@', ""));
 
         let dump_parent = patch_dump.parent().unwrap();
         if !dump_parent.is_dir() {
