@@ -1,6 +1,6 @@
 [package]
 name = "lovely-core"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2021"
 
 [dependencies]
@@ -17,3 +17,4 @@ wildmatch = "2.3.0"
 log = "0.4.21"
 ropey = "1.6.1"
 regex-cursor = "0.1.4"
+regex-lite = "0.1.5"
