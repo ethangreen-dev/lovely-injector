@@ -357,15 +357,17 @@ impl PatchTable {
             }
         }  
 
-        let new_buffer = rope.to_string();
-        let new_buffer = new_buffer.split('\n').map(String::from).collect::<Vec<String>>();
+        let mut patched_lines = {
+            let inner = rope.to_string();
+            inner.split('\n').map(String::from).collect::<Vec<_>>()
+        };
 
         // Apply variable interpolation.
-        // for line in new_buffer.iter_mut() {
-        //     patch_old::apply_var_interp(line, &self.vars);
-        // }
+        for line in patched_lines.iter_mut() {
+            patch::apply_var_interp(line, &self.vars);
+        }
 
-        let patched = new_buffer.join("\n");
+        let patched = patched_lines.join("\n");
 
         if patch_count == 1 {
             info!("[LOVELY] Applied 1 patch to '{target}'");
