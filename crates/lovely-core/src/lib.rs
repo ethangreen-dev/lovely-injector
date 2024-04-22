@@ -132,7 +132,7 @@ impl Lovely {
         let patch_dump = self.mod_dir
             .join("lovely")
             .join("dump")
-            .join(name);
+            .join(name.replace('@', ""));
 
         let dump_parent = patch_dump.parent().unwrap();
         if !dump_parent.is_dir() {
