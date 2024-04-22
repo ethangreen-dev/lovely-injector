@@ -13,6 +13,7 @@ use log::*;
 
 use getargs::{Arg, Options};
 use manifest::Patch;
+use ropey::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -20,8 +21,8 @@ use crate::manifest::PatchManifest;
 
 pub mod sys;
 pub mod manifest;
-pub mod patch;
 pub mod log;
+pub mod patch;
 
 type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Send + Sync + 'static;
 
@@ -229,6 +230,9 @@ impl PatchTable {
                     Patch::Pattern(x) => {
                         targets.insert(x.target.clone());
                     }
+                    Patch::Regex(x) => {
+                        targets.insert(x.target.clone());
+                    }
                 }
             }
 
@@ -309,9 +313,18 @@ impl PatchTable {
                 _ => None
             })
             .collect::<Vec<_>>();
+        let regex_patches = self
+            .patches
+            .iter()
+            .filter_map(|x| match x {
+                Patch::Regex(patch) => Some(patch),
+                _ => None
+            })
+            .collect::<Vec<_>>();
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
+        let mut rope = Rope::from_str(buffer);
 
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.as_ref().unwrap();
@@ -326,48 +339,41 @@ impl PatchTable {
         }
 
         // Apply copy patches.
-        let mut lines = buffer.lines().map(String::from).collect::<Vec<_>>();
         for patch in copy_patches {
-            let result = patch.apply(target, &mut lines);
-            if result {
+            if patch.apply(target, &mut rope) {
                 patch_count += 1;
             }
         }
 
-        // Allocate a new buffer. We'll fill this out as we apply line-based patches.
-        let mut new_buffer: Vec<String> = Vec::new();
-        for line in lines.iter_mut() {
-            let mut before_lines: Vec<String> = vec![];
-            let mut after_lines: Vec<String> = vec![];
-            let mut new_line = line.to_string();
-
-            // Apply pattern patches to each line.
-            for patch in &pattern_patches {
-                let patched = patch.apply(target, line);
-                new_line = line.to_string();
-
-                // Yes, we are nesting too much here.
-                if patched.is_none() {
-                    continue;
-                }
-
-                let (mut before, mut after) = patched.unwrap();
-                before_lines.append(&mut before);
-                after_lines.append(&mut after);
+        for patch in pattern_patches {
+            if patch.apply(target, &mut rope) {
+                patch_count += 1;
             }
-
-            new_buffer.append(&mut before_lines);
-            new_buffer.push(new_line);
-            new_buffer.append(&mut after_lines);
         }
 
+        for patch in regex_patches {
+            if patch.apply(target, &mut rope) {
+                patch_count += 1;
+            }
+        }  
+
+        let mut patched_lines = {
+            let inner = rope.to_string();
+            inner.split('\n').map(String::from).collect::<Vec<_>>()
+        };
+
         // Apply variable interpolation.
-        for line in new_buffer.iter_mut() {
+        for line in patched_lines.iter_mut() {
             patch::apply_var_interp(line, &self.vars);
         }
 
-        let patched = new_buffer.join("\n");
-        info!("[LOVELY] Applied {patch_count} patches to '{target}'");
+        let patched = patched_lines.join("\n");
+
+        if patch_count == 1 {
+            info!("[LOVELY] Applied 1 patch to '{target}'");
+        } else {
+            info!("[LOVELY] Applied {patch_count} patches to '{target}'");
+        }
         
         // Compute the integrity hash of the patched file.
         let mut hasher = Sha256::new();
