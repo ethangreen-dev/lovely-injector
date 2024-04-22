@@ -24,6 +24,11 @@ pub struct RegexPatch {
     // The payload that will be inserted. Regex capture groups can be interpolated
     // by $index.
     pub payload: String,
+
+    // A string or Regex capture to prepend onto the start of each LINE of the payload.
+    // This value defaults to an empty string.
+    #[serde(default)]
+    pub line_prepend: String,
 }
 
 impl RegexPatch {
@@ -47,7 +52,7 @@ impl RegexPatch {
         let mut delta = 0_isize;
 
         for groups in captures {
-            dbg!(&groups);
+            dbg!("got {} capture groups: {groups:#?}", groups.group_len());
 
             // Get the entire captured span (index 0);
             let base = groups.get_group(0).unwrap();
@@ -56,12 +61,44 @@ impl RegexPatch {
 
             let base_str = rope.get_byte_slice(base_start..base_end).unwrap().to_string();
 
+            // Interpolate capture groups into self.line_prepend, if any capture groups exist within.
+            let mut line_prepend = String::new();
+            interpolate::string(
+                &self.line_prepend,
+                |index, dest| {
+                    let span = groups.get_group(index).unwrap();
+                    let start = (span.start as isize + delta) as usize;
+                    let end = (span.end as isize + delta) as usize;
+
+                    let rope_slice = rope.get_byte_slice(start..end).unwrap();
+
+                    dest.push_str(&rope_slice.to_string());
+                },
+                |name| {
+                    let pid = groups.pattern().unwrap();
+                    groups.group_info().to_index(pid, name)
+                },
+                &mut line_prepend
+            );
+
+            // Prepend each line of the payload with line_prepend.
+            let new_payload = self
+                .payload
+                .lines()
+                .map(|x| if !x.is_empty() {
+                    format!("{line_prepend}{x}")
+                } else {
+                    x.to_string()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
             // implementation seems to be broken when working with ropes.
             let mut payload = String::new();
             interpolate::string(
-                &self.payload,
+                &new_payload,
                 |index, dest| {
                     let span = groups.get_group(index).unwrap();
                     let start = (span.start as isize + delta) as usize;
@@ -77,14 +114,6 @@ impl RegexPatch {
                 },
                 &mut payload
             );
-
-            dbg!(groups.group_info());
-
-            // Insert the interpolated payload into a position relative to the target capture group.
-            // let root_capture = self.root_capture.as_deref().unwrap_or("$0");
-
-            // let target_group = groups.get_group_by_name(root_capture)
-            //     .unwrap_or_else(|| panic!("The capture group with name '{}' could not be found in '{base_str}' with the Regex pattern '{}'", root_capture, self.pattern));
 
             // Cleanup and convert the specified root capture to a span.
             let target_group = {
@@ -111,8 +140,6 @@ impl RegexPatch {
             let char_start = rope.byte_to_char(target_start);
             let char_end = rope.byte_to_char(target_end);
 
-            println!("payload: {payload}");
-
             match self.position {
                 InsertPosition::Before => {
                     rope.insert(char_start - 1, &payload);
@@ -125,9 +152,6 @@ impl RegexPatch {
                     rope.insert(char_start, &payload);
                 }
             }
-
-            // rope.remove(char_start..char_end);
-            // rope.insert(char_start, &payload);
 
             let new_len = payload.len();
             let old_len = target_group.end - target_group.start;
