@@ -1,3 +1,4 @@
+use std::env;
 use std::panic;
 use std::ffi::c_void;
 
@@ -45,7 +46,10 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
-    let _ = AllocConsole();
+    let args = env::args().collect::<Vec<_>>();
+    if !args.contains(&"--disable-console".to_string()) { 
+        let _ = AllocConsole();
+    }
 
     // Initialize the lovely runtime.
     let rt = Lovely::init(&|a, b, c, d| LuaLoadbuffer_Detour.call(a, b, c, d));
