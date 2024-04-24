@@ -45,8 +45,8 @@ impl PatternPatch {
         let mut line_delta = 0;
 
         for (line_idx, line) in matches {
-            let start = rope.line_to_byte(line_idx) + line_delta;
-            let end = start + line.len();
+            let start = rope.line_to_char(line_idx + line_delta);
+            let end = start + line.chars().count();
             let payload_lines = self.payload.lines().count();
 
             let indent = if self.match_indent {
@@ -66,23 +66,22 @@ impl PatternPatch {
                 "\n"
             };
 
-            let replace = match self.position {
+            let new_payload = format!("{payload}{newline}");
+            match self.position {
                 InsertPosition::Before => { 
                     line_delta += payload_lines;
-                    format!("{}{newline}{line}", payload)
+                    rope.insert(start, &new_payload);
                 }
                 InsertPosition::After => {
                     line_delta += payload_lines;
-                    format!("{line}{}{newline}", payload)
+                    rope.insert(end, &new_payload);
                 }
                 InsertPosition::At => {
                     line_delta += payload_lines - 1;
-                    format!("{indent}{}{newline}", payload)
+                    rope.remove(start..end);
+                    rope.insert(start, &new_payload);
                 }
             };
-
-            rope.remove(start..end);
-            rope.insert(start, &replace);
         }
 
         true
