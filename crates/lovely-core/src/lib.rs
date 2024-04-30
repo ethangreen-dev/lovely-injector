@@ -43,8 +43,11 @@ impl Lovely {
 
         let args = std::env::args().skip(1).collect::<Vec<_>>();
         let mut opts = Options::new(args.iter().map(String::as_str));
-    
-        let mut mod_dir = dirs::config_dir().unwrap().join("Balatro\\Mods");
+        let mut mod_dir = dirs::config_dir()
+            .unwrap()
+            .join("Balatro")
+            .join("Mods");
+        
         let mut is_vanilla = false;
     
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {

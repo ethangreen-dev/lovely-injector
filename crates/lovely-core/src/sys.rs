@@ -152,6 +152,10 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     for i in 0..argc {
         let mut str_len = 0_isize; 
         let arg_str = lua_tolstring(state, -1, &mut str_len);
+        if arg_str.is_null() {
+            out.push_str("[GAME] nil");
+            continue;
+        }
         
         let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
         let arg_str = String::from_utf8_lossy(str_buf);
