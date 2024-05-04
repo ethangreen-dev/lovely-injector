@@ -236,7 +236,7 @@ impl PatchTable {
                     .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
 
                 toml::from_str(&str)
-                    .unwrap_or_else(|e| panic!("Failed to parse patch file at {patch_file:?}:\n{e:?}"))
+                    .unwrap_or_else(|e| panic!("Failed to parse patch file at {patch_file:?}:\n{}", e.to_string()))
             };
 
             // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
