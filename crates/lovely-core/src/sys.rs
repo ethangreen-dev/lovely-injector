@@ -153,7 +153,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
         let mut str_len = 0_isize; 
         let arg_str = lua_tolstring(state, -1, &mut str_len);
         if arg_str.is_null() {
-            out.push_str("[GAME] nil");
+            out.push_str("[G] nil");
             continue;
         }
         
@@ -164,7 +164,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
             out.push('\t');
         }
 
-        out.push_str(&format!("[GAME] {arg_str}"));
+        out.push_str(&format!("[G] {arg_str}"));
         lua_settop(state, -(1) - 1);
     }
 

@@ -39,15 +39,20 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
         let start = Instant::now();
 
-        log::init().unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
-
         let args = std::env::args().skip(1).collect::<Vec<_>>();
         let mut opts = Options::new(args.iter().map(String::as_str));
         let mut mod_dir = dirs::config_dir()
             .unwrap()
             .join("Balatro")
             .join("Mods");
+
+        let log_dir = mod_dir.join("lovely").join("log");
         
+        log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
+        
+        let version = env!("CARGO_PKG_VERSION");
+        info!("Lovely {version}");
+
         let mut is_vanilla = false;
     
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
@@ -84,6 +89,7 @@ impl Lovely {
         }
 
         info!("Game directory is at {game_dir:?}");
+        info!("Writing logs to {log_dir:?}");
     
         if !mod_dir.is_dir() {
             info!("Creating mods directory at {mod_dir:?}");
@@ -101,7 +107,7 @@ impl Lovely {
                 .unwrap_or_else(|e| panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}"));
         }
         
-        info!("Lovely initialization complete in {}ms", start.elapsed().as_millis());
+        info!("Initialization complete in {}ms", start.elapsed().as_millis());
 
         Lovely {
             mod_dir,
@@ -394,9 +400,9 @@ impl PatchTable {
         let patched = patched_lines.join("\n");
 
         if patch_count == 1 {
-            info!("[LOVELY] Applied 1 patch to '{target}'");
+            info!("Applied 1 patch to '{target}'");
         } else {
-            info!("[LOVELY] Applied {patch_count} patches to '{target}'");
+            info!("Applied {patch_count} patches to '{target}'");
         }
         
         // Compute the integrity hash of the patched file.
