@@ -39,11 +39,13 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
         let start = Instant::now();
 
-        let args = std::env::args().skip(1).collect::<Vec<_>>();
-        let mut opts = Options::new(args.iter().map(String::as_str));
+        let mut it = std::env::args();
+        let arg1 = it.next().unwrap();
+        let args = it.collect::<Vec<_>>();
+        let game_name = Path::new(&arg1).file_stem().unwrap().to_string_lossy().replace(".", "_");        let mut opts = Options::new(args.iter().map(String::as_str));
         let mut mod_dir = dirs::config_dir()
             .unwrap()
-            .join("Balatro")
+            .join(game_name)
             .join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
