@@ -7,7 +7,7 @@ use super::InsertPosition;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PatternPatch {
     // The pattern that the line will be matched against. Very simple,
-    // supports only `?` (one occurance of any character) and `*` (any numver of any character).
+    // supports only `?` (one occurrence of any character) and `*` (any number of any character).
     // Patterns are matched against a left-trimmed version of the line, so whitespace does not
     // need to be considered.
     pub pattern: String,
@@ -18,7 +18,6 @@ pub struct PatternPatch {
     pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
-    pub overwrite: bool,
 }
 
 impl PatternPatch {
