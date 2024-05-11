@@ -38,8 +38,8 @@ impl Log for LovelyLogger {
 
         // Append the line to the log file, creating it if it does not exist.
         let mut file = self.log_file.write().unwrap();
-        file.write(msg.as_bytes()).unwrap();
-        file.write("\n".as_bytes()).unwrap();
+        file.write_all(msg.as_bytes()).unwrap();
+        file.write_all("\n".as_bytes()).unwrap();
     }
 
     fn flush(&self) {}
@@ -48,7 +48,7 @@ impl Log for LovelyLogger {
 pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
     // We create a log file within the log directory of name lovely-datetime.log
     if !log_dir.is_dir() {
-        fs::create_dir_all(&log_dir).unwrap();
+        fs::create_dir_all(log_dir).unwrap();
     }
 
     let now = Local::now();
