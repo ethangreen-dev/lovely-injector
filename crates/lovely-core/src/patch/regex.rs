@@ -52,8 +52,6 @@ impl RegexPatch {
         let mut delta = 0_isize;
 
         for groups in captures {
-            dbg!("got {} capture groups: {groups:#?}", groups.group_len());
-
             // Get the entire captured span (index 0);
             let base = groups.get_group(0).unwrap();
             let base_start = (base.start as isize + delta) as usize;
