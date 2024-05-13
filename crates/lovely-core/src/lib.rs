@@ -241,8 +241,21 @@ impl PatchTable {
                 let str = fs::read_to_string(&patch_file)
                     .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
 
-                toml::from_str(&str)
-                    .unwrap_or_else(|e| panic!("Failed to parse patch file at {patch_file:?}:\n{}", e.to_string()))
+                let ignored_key_callback = |key: serde_ignored::Path| {
+                    // get the last component of the key, which looks something like patches.0.overwrite
+                    if let serde_ignored::Path::Map { parent: _, key: ref key_last_component } = key
+                    {
+                        if key_last_component == "overwrite" {
+                            warn!("The key `overwrite` is deprecated. To perform replacement use `position = \"at\"`.");
+                        }
+                    }
+                    warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
+                };
+
+                serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
+                    .unwrap_or_else(|e| {
+                        panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
+                    })
             };
 
             // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.

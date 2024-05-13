@@ -23,9 +23,9 @@ version = "1.0.0"
 dump_lua = true
 priority = 0
 
-# Define a var substitution rule. This searches for lines that begin with ${{lovely:var_name}} (var_name from this example, it can really be anything) 
+# Define a var substitution rule. This searches for lines that contain {{lovely:var_name}} (var_name from this example, it can really be anything)
 # and replaces each match with the provided value.
-# This example would transform print("${lovely:var_name}") to print("Hello world!").
+# This example would transform print('{{lovely:var_name}}') to print('Hello world!').
 # USEFUL: For when you want to reduce the complexity of repetitive injections, eg. embedding release version numbers in multiple locations.
 [vars]
 var_name = "Hello world!"
@@ -39,10 +39,9 @@ pattern = "self.SPEEDFACTOR = 1"
 position = "after"
 payload = '''
 initSteamodded()
-print('${{lovely:var_name}}')
+print('{{lovely:var_name}}')
 '''
 match_indent = true
-overwrite = false
 
 # Append or prepend the contents of one or more files onto the target.
 # USEFUL: For when you *only* care about getting your code into the game, nothing else. This does NOT inject it as a new module.
@@ -68,8 +67,7 @@ before = "main.lua"
 name = "nativefs"
 ```
 
-
-### Patch variants 
+### Patch variants
 
 This file contains two patch definitions - a pattern patch, which (currently) changes a single line at a position offset to some pattern match, and a copy patch, which reads one or more input lua files and either appends or prepends them onto the target. The former is used when you need to surgically embed code at specific locations in the target (very useful for modloader init routines), and the latter is designed for use when you need to bulk inject position-independent code into the game.
 
