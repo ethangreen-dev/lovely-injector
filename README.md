@@ -4,12 +4,25 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ## Manual Installation
 
-1. Download the latest release.
-2. Open the .zip archive, copy `version.dll` into the game directory. You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-3. Install one or more mods into `%AppData%/Balatro/Mods`.
-4. Run the game.
+**Tip:** You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 
-**Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own directory within `%AppData%/Balatro/Mods`. No exceptions!
+### Windows
+
+1. Download the latest release for Windows. This will be `lovely-x86_64-pc-windows-msvc.zip`.
+2. Open the .zip archive, copy `version.dll` into the game directory.
+3. Install one or more mods into the mod directory for your game. This should be `%AppData%/Balatro/Mods` (if you are modding Balatro).
+4. Run the game through Steam.
+
+### Mac
+
+1. Download the latest release for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.zip`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.zip`
+2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory.
+3. Install one or more mods into the Mac mod directory for your game. This should be `~/Library/Application Support/Balatro/Mods` (if you are modding Balatro).
+4. Run the game by either dragging and dropping `run_lovely.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely.sh` in the terminal within the game directory.
+
+Note: You cannot run your game through Steam due to a bug within the Steam client. You must run it with the `run_lovely.sh` script.
+
+**Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 
 ## Patches
 
@@ -23,15 +36,21 @@ version = "1.0.0"
 dump_lua = true
 priority = 0
 
-# Define a var substitution rule. This searches for lines that contain {{lovely:var_name}} (var_name from this example, it can really be anything)
-# and replaces each match with the provided value.
+# Define a var substitution rule. This searches for lines that contain {{lovely:var_name}} 
+# (var_name from this example, it can really be anything) and replaces each match with the 
+# provided value.
 # This example would transform print('{{lovely:var_name}}') to print('Hello world!').
-# USEFUL: For when you want to reduce the complexity of repetitive injections, eg. embedding release version numbers in multiple locations.
+# 
+# USEFUL: For when you want to reduce the complexity of repetitive injections, eg. embedding 
+# release version numbers in multiple locations.
 [vars]
 var_name = "Hello world!"
 
-# Inject one or more lines of code before, after, or at (replacing) a line which matches the provided pattern.
-# USEFUL: For when you need to add / modify a small amount of code to setup initialization routines, etc.
+# Inject one or more lines of code before, after, or at (replacing) a line which matches 
+# the provided pattern.
+#
+# USEFUL: For when you need to add / modify a small amount of code to setup initialization 
+# routines, etc.
 [[patches]]
 [patches.pattern]
 target = "game.lua"
@@ -43,8 +62,37 @@ print('{{lovely:var_name}}')
 '''
 match_indent = true
 
+# Inject one or more lines of code before, after, at, or interwoven into one or more 
+# Regex capture groups.
+# - I recommend you to use a Regex playground like https://regexr.com to build 
+#   your patterns.
+# - Regex is NOT EFFICIENT. Please use the pattern patch unless absolutely necessary.
+# - This patch has capture group support.
+# - This patch does NOT trim whitespace from each line. Take that into account when 
+#   designing your pattern.
+#
+# USEFUL: For when the pattern patch is not expressive enough to describe how the 
+# payload should be injected.
+[patches.regex]
+target = "tag.lua"
+pattern = "(?<indent>[\t ]*)if (?<cond>_context.type == 'eval' then)"
+position = 'at'
+line_prepend = '$indent'
+payload = '''
+local obj = SMODS.Tags[self.key]
+local res
+if obj and obj.apply and type(obj.apply) == 'function' then
+    res = obj.apply(self, _context)
+end
+if res then
+    return res
+elseif $cond
+'''
+
 # Append or prepend the contents of one or more files onto the target.
-# USEFUL: For when you *only* care about getting your code into the game, nothing else. This does NOT inject it as a new module.
+#
+# USEFUL: For when you *only* care about getting your code into the game, nothing else. 
+# This does NOT inject it as a new module.
 [[patches]]
 [patches.copy]
 target = "main.lua"
@@ -69,7 +117,7 @@ name = "nativefs"
 
 ### Patch variants
 
-This file contains two patch definitions - a pattern patch, which (currently) changes a single line at a position offset to some pattern match, and a copy patch, which reads one or more input lua files and either appends or prepends them onto the target. The former is used when you need to surgically embed code at specific locations in the target (very useful for modloader init routines), and the latter is designed for use when you need to bulk inject position-independent code into the game.
+This file contains three patch definitions - a pattern patch, which (currently) changes a single line at a position offset to some pattern match, and a copy patch, which reads one or more input lua files and either appends or prepends them onto the target. The former is used when you need to surgically embed code at specific locations in the target (very useful for modloader init routines), and the latter is designed for use when you need to bulk inject position-independent code into the game.
 
 ### Patch files
 
