@@ -4,9 +4,9 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ## Manual Installation
 
-**Tip:** You can navigate to the location by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
+**Tip:** You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 
-### Windows
+### Windows + Proton / Wine
 
 1. Download the latest release for Windows. This will be `lovely-x86_64-pc-windows-msvc.zip`.
 2. Open the .zip archive, copy `version.dll` into the game directory.
