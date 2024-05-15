@@ -116,7 +116,7 @@ name = "nativefs"
 
 ### TL;DR - Patch variants
 
-- Use `pattern` patches are used to surgically embed code at specific locations within the target. Supports the `*` and `+` wildcards.
+- Use `pattern` patches to surgically embed code at specific locations within the target. Supports `*` (matches 0 or more occurrences of any character) and `?` (matches exactly one occurrence of any character) wildcards.
 - Use `regex` patches *only* when the pattern patch does not fulfill your needs. This is basically the pattern patch but with a backing regex query engine, capture groups and all.
 - Use `copy` patches when you need to copy a large amount of position-independent code into the target.
 - Use `module` patches to inject a lua module into the game's runtime. Note that this currently only supports single file modules, but this should be changing soon.
@@ -125,7 +125,7 @@ name = "nativefs"
 
 Patch files are loaded from mod directories inside of the mod folder (`MOD_DIR`). Lovely will load any patch files present within `MOD_DIR/ModName/lovely/` or load a single patch from `MOD_DIR/ModName/lovely.toml`. If multiple patches are loaded they will be injected into the game in the order in which they are found.
 
-Paths defined within the patch are rooted by the mod's directory. For example, `core/deck.lua` is resolved to `MOD_DIR/Steamodded/core/deck.lua`.
+Paths defined within the patch are rooted by the mod's directory. For example, `core/deck.lua` resolves to `MOD_DIR/ModName/core/deck.lua`.
 
 ### Patch targets
 
