@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.*"
+
+jobs:
+  prepare:
+    name: Create draft release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check that current branch is master
+        if: endsWith(github.ref, 'master') == false
+        run: exit -1
+
+        # Yes, this is the lazy way of doing it. Am I lazy? Yes.
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "### [Install guide](https://github.com/ethangreen-dev/lovely-injector?tab=readme-ov-file#manual-installation)" >> NOTE.md
+          echo "|OS|Download|" >> NOTE.md
+          echo "|--|--|" >> NOTE.md
+          echo "|Windows|[lovely-x86_64-pc-windows-msvc.zip](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|" >> NOTE.md
+          echo "|Mac (Arm)|[lovely-aarch64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|" >> NOTE.md
+          echo "|Mac (x86)|[lovely-x86_64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-apple-darwin.tar.gz)|" >> NOTE.md
+
+          gh release create ${{ github.ref_name }} \
+          --title "${{ github.ref_name }}" \
+          --draft  \
+          --generate-notes \
+          --notes-file NOTE.md \
+  
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+  
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --target ${{ matrix.target }} --package lovely-win --release
+
+      - name: Compress
+        run: |
+          cd ./target/${{ matrix.target }}/release/
+          7z a "lovely-${{ matrix.target }}.zip" version.dll
+          mv "lovely-${{ matrix.target }}.zip" ${{ github.workspace }}
+      
+      - name: Submit build artifact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.zip
+
+  build-mac:
+    needs: prepare
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Install Mac SDK
+        run: |
+          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX10.9.sdk.tar.xz" | tar -J -x -C /opt
+          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz" | tar -J -x -C /opt
+          echo "SDKROOT=/opt/MacOSX11.3.sdk" >> $GITHUB_ENV
+
+      - name: Install cargo-zigbuild
+        run: |
+          pip3 install cargo-zigbuild
+
+      - name: Build
+        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-mac --release
+
+      - name: Compress tar.gz
+        run: |
+          cp ./crates/lovely-mac/run_lovely.sh ./target/${{ matrix.target }}/release/
+          cd ./target/${{ matrix.target }}/release/
+          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely.sh
+          mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
+      
+      - name: Submit build artifact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload ${{ github.ref_name }} lovely-${{ matrix.target }}.tar.gz
