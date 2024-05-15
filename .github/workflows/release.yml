@@ -14,10 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check that current branch is master
-        if: github.ref != 'refs/heads/master'
-        run: exit -1
-
         # Yes, this is the lazy way of doing it. Am I lazy? Yes.
       - name: Create draft release
         env:
