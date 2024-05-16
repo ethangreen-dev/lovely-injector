@@ -39,10 +39,14 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
         let start = Instant::now();
 
-        let mut it = std::env::args();
-        let arg1 = it.next().unwrap();
-        let args = it.collect::<Vec<_>>();
-        let game_name = Path::new(&arg1).file_stem().unwrap().to_string_lossy().replace(".", "_");        let mut opts = Options::new(args.iter().map(String::as_str));
+        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        let mut opts = Options::new(args.iter().map(String::as_str));
+        let game_name = env::current_exe()
+            .expect("Failed to get the path of the current executable.")
+            .file_stem()
+            .expect("Failed to get file_stem component of current executable path.")
+            .to_string_lossy()
+            .replace(".", "_");
         let mut mod_dir = dirs::config_dir()
             .unwrap()
             .join(game_name)
