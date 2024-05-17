@@ -41,9 +41,15 @@ impl Lovely {
 
         let args = std::env::args().skip(1).collect::<Vec<_>>();
         let mut opts = Options::new(args.iter().map(String::as_str));
+        let game_name = env::current_exe()
+            .expect("Failed to get the path of the current executable.")
+            .file_stem()
+            .expect("Failed to get file_stem component of current executable path.")
+            .to_string_lossy()
+            .replace(".", "_");
         let mut mod_dir = dirs::config_dir()
             .unwrap()
-            .join("Balatro")
+            .join(game_name)
             .join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
