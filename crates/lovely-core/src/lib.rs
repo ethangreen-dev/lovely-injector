@@ -201,7 +201,18 @@ impl PatchTable {
             .unwrap_or_else(|e| panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}"))
             .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
-            .map(|x| x.path());
+            .map(|x| x.path())
+            .filter(|x| {
+                let ignore_file = x.join(".lovelyignore");
+                let dirname = x
+                    .file_name()
+                    .unwrap_or_else(|| panic!("Failed to read directory name of {x:?}"))
+                    .to_string_lossy();
+                if ignore_file.is_file() {
+                    info!("Found .lovelyignore in '{dirname}', skipping it.");
+                }
+                !ignore_file.is_file()
+            });
 
         let patch_files = mod_dirs
             .flat_map(|dir| {
