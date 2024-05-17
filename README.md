@@ -11,7 +11,8 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 1. Download the latest release for Windows. This will be `lovely-x86_64-pc-windows-msvc.zip`.
 2. Open the .zip archive, copy `version.dll` into the game directory.
 3. Install one or more mods into the mod directory for your game. This should be `%AppData%/Balatro/Mods` (if you are modding Balatro).
-4. Run the game through Steam.
+4. **<ins>Only Steam Deck / Proton / Wine</ins>** Set your game's launch options in Steam to `WINEDLLOVERRIDES="version=n,b" %command%`.
+5. Run the game through Steam.
 
 ### Mac
 
