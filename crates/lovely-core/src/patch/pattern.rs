@@ -18,6 +18,10 @@ pub struct PatternPatch {
     pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
+
+    /// We keep this field around for legacy compat. It doesn't do anything (and never has).
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 impl PatternPatch {
