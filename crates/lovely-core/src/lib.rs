@@ -258,14 +258,8 @@ impl PatchTable {
                 let str = fs::read_to_string(&patch_file)
                     .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
 
+                // Handle invalid fields in a non-explosive way.
                 let ignored_key_callback = |key: serde_ignored::Path| {
-                    // get the last component of the key, which looks something like patches.0.overwrite
-                    if let serde_ignored::Path::Map { parent: _, key: ref key_last_component } = key
-                    {
-                        if key_last_component == "overwrite" {
-                            warn!("The key `overwrite` is deprecated. To perform replacement use `position = \"at\"`.");
-                        }
-                    }
                     warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
                 };
 
