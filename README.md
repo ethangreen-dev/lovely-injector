@@ -18,7 +18,8 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 1. Download the latest release for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
 2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory.
-3. Install one or more mods into the Mac mod directory for your game. This should be `~/Library/Application Support/Balatro/Mods` (if you are modding Balatro).
+3. Install one or more mods into the Mac mod directory for your game. This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
+If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
 4. Run the game by either dragging and dropping `run_lovely.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely.sh` in the terminal within the game directory.
 
 Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely.sh` script.
