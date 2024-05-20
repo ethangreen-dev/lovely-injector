@@ -141,22 +141,24 @@ impl RegexPatch {
             match self.position {
                 InsertPosition::Before => {
                     rope.insert(char_start - 1, &payload);
+                    let new_len = payload.len();
+                    delta += new_len as isize;
                 }
                 InsertPosition::After => {
                     rope.insert(char_end, &payload);
+                    let new_len = payload.len();
+                    delta += new_len as isize;
                 }
                 InsertPosition::At => {
                     rope.remove(char_start..char_end);
                     rope.insert(char_start, &payload);
+                    let old_len = target_group.end - target_group.start;
+                    let new_len = payload.len();
+                    delta -= old_len as isize;
+                    delta += new_len as isize;
                 }
             }
-
-            let new_len = payload.len();
-            let old_len = target_group.end - target_group.start;
-
-            delta += new_len as isize - old_len as isize;
         }
-
         true
     }
 }
