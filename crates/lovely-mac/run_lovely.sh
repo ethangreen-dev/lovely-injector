@@ -5,4 +5,4 @@ defaultpath="/Users/$USER/Library/Application Support/Steam/steamapps/common/$ga
 export DYLD_INSERT_LIBRARIES=liblovely.dylib
 
 cd "$defaultpath"
-./$gamename.app/Contents/MacOS/love
+./$gamename.app/Contents/MacOS/love "$@"
