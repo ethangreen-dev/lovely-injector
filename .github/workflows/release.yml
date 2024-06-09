@@ -22,7 +22,7 @@ jobs:
           echo "### [Install guide](https://github.com/ethangreen-dev/lovely-injector?tab=readme-ov-file#manual-installation)" >> NOTE.md
           echo "|OS|Download|" >> NOTE.md
           echo "|--|--|" >> NOTE.md
-          echo "|Windows|[lovely-x86_64-pc-windows-msvc.zip](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|" >> NOTE.md
+          echo "|Windows|[lovely-x86_64-pc-windows-msvc.zip](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-pc-windows-msvc.zip)|" >> NOTE.md
           echo "|Mac (Arm)|[lovely-aarch64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|" >> NOTE.md
           echo "|Mac (x86)|[lovely-x86_64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-apple-darwin.tar.gz)|" >> NOTE.md
 
