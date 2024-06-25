@@ -1,6 +1,6 @@
 [package]
 name = "lovely-core"
-version = "0.5.0-beta5"
+version = "0.5.0-beta6"
 edition = "2021"
 
 [dependencies]
