@@ -369,19 +369,11 @@ impl PatchTable {
                 _ => None
             })
             .collect::<Vec<_>>();
-        let pattern_patches = self
+        let pattern_or_regex_patches = self
             .patches
             .iter()
             .filter_map(|x| match x {
-                Patch::Pattern(patch) => Some(patch),
-                _ => None
-            })
-            .collect::<Vec<_>>();
-        let regex_patches = self
-            .patches
-            .iter()
-            .filter_map(|x| match x {
-                Patch::Regex(patch) => Some(patch),
+                Patch::Pattern(_) | Patch::Regex(_) => Some(x),
                 _ => None
             })
             .collect::<Vec<_>>();
@@ -409,17 +401,21 @@ impl PatchTable {
             }
         }
 
-        for patch in pattern_patches {
-            if patch.apply(target, &mut rope) {
-                patch_count += 1;
+        for patch in pattern_or_regex_patches {
+            match patch {
+                Patch::Pattern(patch) => {
+                    if patch.apply(target, &mut rope) {
+                        patch_count += 1;
+                    }
+                },
+                Patch::Regex(patch) => {
+                    if patch.apply(target, &mut rope) {
+                        patch_count += 1;
+                    }
+                },
+                _ => unreachable!()
             }
         }
-
-        for patch in regex_patches {
-            if patch.apply(target, &mut rope) {
-                patch_count += 1;
-            }
-        }  
 
         let mut patched_lines = {
             let inner = rope.to_string();
