@@ -1,4 +1,4 @@
-use regex_cursor::{Input, IntoCursor};
+use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
 use regex_cursor::regex_automata::util::interpolate;
 
@@ -6,6 +6,7 @@ use itertools::Itertools;
 use crop::Rope;
 use serde::{Serialize, Deserialize};
 
+use crate::chunk_vec_cursor::IntoCursor;
 use super::InsertPosition;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -44,7 +45,7 @@ impl RegexPatch {
         let re = Regex::new(&self.pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex pattern '{}': {e:?}", self.pattern));
 
-        let mut captures = re.captures_iter(input).collect::<Vec<_>>();
+        let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
             log::info!("Regex '{}' on target '{target}' did not result in any matches", self.pattern);
             return false;

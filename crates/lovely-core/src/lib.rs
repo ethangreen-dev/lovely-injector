@@ -18,6 +18,7 @@ use crop::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
+pub mod chunk_vec_cursor;
 pub mod sys;
 pub mod log;
 pub mod patch;
@@ -37,7 +38,7 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
         let start = Instant::now();
 
-        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        let args = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
         let cur_exe = env::current_exe()
             .expect("Failed to get the path of the current executable.");
@@ -243,13 +244,13 @@ impl PatchTable {
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().unwrap() == "toml")
-                        .collect::<Vec<_>>();
+                        .collect_vec();
                     toml_files.append(&mut subfiles);
                 }
 
                 toml_files
             })
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
         let mut patches: Vec<(Patch, Priority)> = Vec::new();
@@ -430,7 +431,7 @@ impl PatchTable {
 
         let mut patched_lines = {
             let inner = rope.to_string();
-            inner.split('\n').map(String::from).collect::<Vec<_>>()
+            inner.split('\n').map(String::from).collect_vec()
         };
 
         // Apply variable interpolation.
