@@ -45,19 +45,13 @@ pub fn apply_var_interp(line: &mut String, vars: &HashMap<String, String>) {
     // Cache the compiled regex.
     let re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{lovely:(\w+)\}\}").unwrap());
 
-    let line_copy = line.to_string();
-    let captures = re
-        .captures_iter(&line_copy).map(|x| x.extract());
-
-    for (cap, [var]) in captures {
+    let line_replaced = re.replace_all(line, |captures: &Captures| {
+        let (_, [var]) = captures.extract();
         let Some(val) = vars.get(var) else {
             panic!("Failed to interpolate an unregistered variable '{var}'");
         };
-
-        // This clones the string each time, not efficient. A more efficient solution
-        // would be to use something like mem::take to interpolate the string in-place,
-        // but the complexity would not be worth the performance gain.
-        *line = line.replace(cap, val);
-    }
+        val
+    });
+    *line = line_replaced.to_string();
 }
 
