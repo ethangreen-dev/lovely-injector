@@ -19,6 +19,7 @@ pub struct PatternPatch {
     // pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
+    // Apply patch at most `times` times, warn if the number of matches differs from `times`.
     pub times: Option<usize>,
 
     /// We keep this field around for legacy compat. It doesn't do anything (and never has).

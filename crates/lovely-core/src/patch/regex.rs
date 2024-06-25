@@ -32,6 +32,7 @@ pub struct RegexPatch {
     #[serde(default)]
     pub line_prepend: String,
 
+    // Apply patch at most `times` times, warn if the number of matches differs from `times`.
     pub times: Option<usize>,
 }
 
