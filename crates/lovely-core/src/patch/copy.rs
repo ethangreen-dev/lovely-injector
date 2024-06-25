@@ -19,7 +19,7 @@ impl CopyPatch {
     /// Apply a copy patch onto the provided buffer and name.
     /// If the name is *not* a valid target of this patch, return false and do not
     /// modify the buffer.
-    /// If the name *is* a valid target of this patch, prepend or append the source file(s) contents
+    /// If the name *is* a valid target of this patch, prepend or append the source file(s)'s contents
     /// and return true.
     pub fn apply(&self, target: &str, rope: &mut Rope) -> bool {
         if self.target != target {

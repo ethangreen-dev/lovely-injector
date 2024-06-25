@@ -16,7 +16,7 @@ pub struct PatternPatch {
     // The position to insert the target at. `PatternAt::At` replaces the matched line entirely.
     pub position: InsertPosition,
     pub target: String,
-    pub payload_files: Option<Vec<String>>,
+    // pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
     pub times: Option<usize>,

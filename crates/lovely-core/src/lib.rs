@@ -309,7 +309,7 @@ impl PatchTable {
                     .into_iter()
                     .map(|patch| (patch, priority)),
             );
-            // TODO concerned about name conflicts
+            // TODO concerned about var name conflicts
             var_table.extend(patch_file.vars);
         }
 
@@ -434,6 +434,8 @@ impl PatchTable {
         };
 
         // Apply variable interpolation.
+        // TODO I don't think it's necessary to split into lines
+        // and convert the rope to Strings? seems overcomplicated
         for line in patched_lines.iter_mut() {
             patch::apply_var_interp(line, &self.vars);
         }
