@@ -10,12 +10,13 @@ use crate::patch::regex::RegexPatch;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Manifest {
     pub version: String,
-    pub dump_lua: bool,
-    pub priority: usize,
+    #[serde(default)]
+    pub priority: i32,
 }
 
+// Represents a single .toml file after deserialization.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PatchManifest {
+pub struct PatchFile {
     pub manifest: Manifest,
     pub patches: Vec<Patch>,
 
@@ -24,11 +25,11 @@ pub struct PatchManifest {
     #[serde(default)]
     pub vars: HashMap<String, String>,
 
-    // A table of arguments, read and parsed from the environment command line.
-    // Binds double-hyphenated argument names (--arg) to a value, with additional metadata
-    // available to produce help messages, set default values, and apply other behavior.
-    #[serde(default)]
-    pub args: HashMap<String, PatchArgs>,
+    // // A table of arguments, read and parsed from the environment command line.
+    // // Binds double-hyphenated argument names (--arg) to a value, with additional metadata
+    // // available to produce help messages, set default values, and apply other behavior.
+    // #[serde(default)]
+    // pub args: HashMap<String, PatchArgs>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

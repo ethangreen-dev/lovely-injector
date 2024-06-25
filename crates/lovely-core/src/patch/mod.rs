@@ -4,9 +4,12 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
-use regex_lite::Regex;
+use regex_lite::{Regex, Captures};
 use serde::{Serialize, Deserialize};
 
+pub use patch_types::*;
+
+mod patch_types;
 pub mod copy;
 pub mod module;
 pub mod pattern;
@@ -41,7 +44,7 @@ pub(crate) fn set_cached_file(path: &PathBuf) -> Cow<String> {
 pub fn apply_var_interp(line: &mut String, vars: &HashMap<String, String>) {
     // Cache the compiled regex.
     let re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{lovely:(\w+)\}\}").unwrap());
-    
+
     let line_copy = line.to_string();
     let captures = re
         .captures_iter(&line_copy).map(|x| x.extract());

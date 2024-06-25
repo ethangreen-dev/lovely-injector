@@ -29,6 +29,8 @@ pub struct RegexPatch {
     // This value defaults to an empty string.
     #[serde(default)]
     pub line_prepend: String,
+
+    pub times: Option<u32>,
 }
 
 impl RegexPatch {

@@ -12,15 +12,12 @@ use std::path::{Path, PathBuf};
 use log::*;
 
 use getargs::{Arg, Options};
-use manifest::Patch;
+use patch::{Patch, PatchFile};
 use ropey::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
-use crate::manifest::PatchManifest;
-
 pub mod sys;
-pub mod manifest;
 pub mod log;
 pub mod patch;
 
@@ -201,7 +198,7 @@ pub struct PatchTable {
     targets: HashSet<String>,
     patches: Vec<Patch>,
     vars: HashMap<String, String>,
-    args: HashMap<String, String>,
+    // args: HashMap<String, String>,
 }
 
 impl PatchTable {
@@ -267,7 +264,7 @@ impl PatchTable {
                 patch_dir
             };
 
-            let mut patch: PatchManifest = {
+            let mut patch_file: PatchFile = {
                 let str = fs::read_to_string(&patch_file)
                     .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
 
@@ -284,7 +281,7 @@ impl PatchTable {
 
             // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
             // We also cache patch targets to short-circuit patching for files that don't need it.
-            for patch in &mut patch.patches[..] {
+            for patch in &mut patch_file.patches[..] {
                 match patch {
                     Patch::Copy(ref mut x) => {
                         x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
@@ -303,9 +300,9 @@ impl PatchTable {
                 }
             }
 
-            let inner_patches = patch.patches.as_mut(); 
+            let inner_patches = patch_file.patches.as_mut(); 
             patches.append(inner_patches);
-            var_table.extend(patch.vars);
+            var_table.extend(patch_file.vars);
         }
 
         PatchTable {
@@ -313,7 +310,7 @@ impl PatchTable {
             loadbuffer: None,
             targets,
             vars: var_table,
-            args: HashMap::new(),
+            // args: HashMap::new(),
             patches,
         }
     }
