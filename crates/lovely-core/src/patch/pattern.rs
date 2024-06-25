@@ -36,7 +36,7 @@ impl PatternPatch {
 
         let wm = WildMatch::new(&self.pattern);
         let mut matches = rope
-            .lines()
+            .raw_lines()
             .enumerate()
             .map(|(i, line)| (i, line.to_string()))
             .filter(|(_, line)| wm.matches(line.trim()))
