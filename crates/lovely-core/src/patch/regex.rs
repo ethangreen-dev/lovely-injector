@@ -2,6 +2,7 @@ use regex_cursor::{Input, IntoCursor};
 use regex_cursor::engines::meta::Regex;
 use regex_cursor::regex_automata::util::interpolate;
 
+use itertools::Itertools;
 use ropey::Rope;
 use serde::{Serialize, Deserialize};
 
@@ -30,7 +31,7 @@ pub struct RegexPatch {
     #[serde(default)]
     pub line_prepend: String,
 
-    pub times: Option<u32>,
+    pub times: Option<usize>,
 }
 
 impl RegexPatch {
@@ -43,10 +44,20 @@ impl RegexPatch {
         let re = Regex::new(&self.pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex pattern '{}': {e:?}", self.pattern));
 
-        let captures = re.captures_iter(input).collect::<Vec<_>>();
+        let mut captures = re.captures_iter(input).collect::<Vec<_>>();
         if captures.is_empty() {
-            log::info!("Regex query '{}' on target '{target}' did not result in any matches", self.pattern);
+            log::info!("Regex '{}' on target '{target}' did not result in any matches", self.pattern);
             return false;
+        }
+        if let Some(times) = self.times {
+            if captures.len() < times {
+                log::info!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+            }
+            if captures.len() > times {
+                log::info!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+                log::info!("Ignoring excess matches");
+                captures.truncate(times);
+            }
         }
 
         // This is our running byte offset. We use this to ensure that byte references
@@ -90,7 +101,6 @@ impl RegexPatch {
                 } else {
                     x.to_string()
                 })
-                .collect::<Vec<_>>()
                 .join("\n");
 
             // Interpolate capture groups into the payload.

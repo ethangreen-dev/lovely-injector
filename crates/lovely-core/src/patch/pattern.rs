@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use ropey::Rope;
 use serde::{Serialize, Deserialize};
 use wildmatch::WildMatch;
@@ -18,7 +19,7 @@ pub struct PatternPatch {
     pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
-    pub times: Option<u32>,
+    pub times: Option<usize>,
 
     /// We keep this field around for legacy compat. It doesn't do anything (and never has).
     #[serde(default)]
@@ -34,7 +35,7 @@ impl PatternPatch {
         }
 
         let wm = WildMatch::new(&self.pattern);
-        let matches = rope
+        let mut matches = rope
             .lines()
             .enumerate()
             .map(|(i, line)| (i, line.to_string()))
@@ -42,7 +43,18 @@ impl PatternPatch {
             .collect::<Vec<(_, _)>>();
 
         if matches.is_empty() {
+            log::info!("Pattern '{}' on target '{target}' did not result in any matches", self.pattern);
             return false;
+        }
+        if let Some(times) = self.times {
+            if matches.len() < times {
+                log::info!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+            }
+            if matches.len() > times {
+                log::info!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::info!("Ignoring excess matches");
+                matches.truncate(times);
+            }
         }
 
         // Track the +/- index offset caused by previous line injections.
@@ -59,31 +71,26 @@ impl PatternPatch {
                 String::new()
             };
 
-            let payload = self.payload.split('\n')
+            let mut payload = self.payload.split('\n')
                 .map(|x| format!("{indent}{x}"))
-                .collect::<Vec<_>>()
                 .join("\n");
+            if !self.payload.ends_with('\n') {
+                payload.push('\n');
+            }
 
-            let newline = if self.payload.ends_with('\n') {
-                ""
-            } else {
-                "\n"
-            };
-
-            let new_payload = format!("{payload}{newline}");
             match self.position {
                 InsertPosition::Before => { 
                     line_delta += payload_lines;
-                    rope.insert(start, &new_payload);
+                    rope.insert(start, &payload);
                 }
                 InsertPosition::After => {
                     line_delta += payload_lines;
-                    rope.insert(end, &new_payload);
+                    rope.insert(end, &payload);
                 }
                 InsertPosition::At => {
                     line_delta += payload_lines - 1;
                     rope.remove(start..end);
-                    rope.insert(start, &new_payload);
+                    rope.insert(start, &payload);
                 }
             };
         }
