@@ -7,11 +7,13 @@ use crate::patch::module::ModulePatch;
 use crate::patch::pattern::PatternPatch;
 use crate::patch::regex::RegexPatch;
 
+pub type Priority = i32;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Manifest {
     pub version: String,
     #[serde(default)]
-    pub priority: i32,
+    pub priority: Priority,
 }
 
 // Represents a single .toml file after deserialization.

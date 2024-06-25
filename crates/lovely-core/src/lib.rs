@@ -11,8 +11,9 @@ use std::path::{Path, PathBuf};
 
 use log::*;
 
+use itertools::Itertools;
 use getargs::{Arg, Options};
-use patch::{Patch, PatchFile};
+use patch::{Patch, PatchFile, Priority};
 use ropey::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
@@ -196,7 +197,8 @@ pub struct PatchTable {
     mod_dir: PathBuf,
     loadbuffer: Option<&'static LoadBuffer>,
     targets: HashSet<String>,
-    patches: Vec<Patch>,
+    // Unsorted
+    patches: Vec<(Patch, Priority)>,
     vars: HashMap<String, String>,
     // args: HashMap<String, String>,
 }
@@ -250,7 +252,7 @@ impl PatchTable {
             .collect::<Vec<_>>();
 
         let mut targets: HashSet<String> = HashSet::new();
-        let mut patches: Vec<Patch> = Vec::new();
+        let mut patches: Vec<(Patch, Priority)> = Vec::new();
         let mut var_table: HashMap<String, String> = HashMap::new();
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
@@ -300,8 +302,14 @@ impl PatchTable {
                 }
             }
 
-            let inner_patches = patch_file.patches.as_mut(); 
-            patches.append(inner_patches);
+            let priority = patch_file.manifest.priority;
+            patches.extend(
+                patch_file
+                    .patches
+                    .into_iter()
+                    .map(|patch| (patch, priority)),
+            );
+            // TODO concerned about name conflicts
             var_table.extend(patch_file.vars);
         }
 
@@ -356,27 +364,30 @@ impl PatchTable {
         let module_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Module(patch) => Some(patch),
+            .filter_map(|(x, prio)| match x {
+                Patch::Module(patch) => Some((patch, prio)),
                 _ => None,
             })
-            .collect::<Vec<_>>();
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
         let copy_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Copy(patch) => Some(patch),
+            .filter_map(|(x, prio)| match x {
+                Patch::Copy(patch) => Some((patch, prio)),
                 _ => None
             })
-            .collect::<Vec<_>>();
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
         let pattern_or_regex_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Pattern(_) | Patch::Regex(_) => Some(x),
+            .filter_map(|(x, prio)| match x {
+                Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio)),
                 _ => None
             })
-            .collect::<Vec<_>>();
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
