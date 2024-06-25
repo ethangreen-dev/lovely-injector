@@ -43,7 +43,7 @@ impl PatternPatch {
             .collect::<Vec<(_, _)>>();
 
         if matches.is_empty() {
-            log::info!("Pattern '{}' on target '{target}' did not result in any matches", self.pattern);
+            log::info!("Pattern '{}' on target '{target}' resulted in no matches", self.pattern);
             return false;
         }
         if let Some(times) = self.times {

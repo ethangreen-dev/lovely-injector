@@ -43,11 +43,11 @@ impl RegexPatch {
 
         let input = Input::new(rope.into_cursor());
         let re = Regex::new(&self.pattern)
-            .unwrap_or_else(|e| panic!("Failed to compile Regex pattern '{}': {e:?}", self.pattern));
+            .unwrap_or_else(|e| panic!("Failed to compile Regex '{}': {e:?}", self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::info!("Regex '{}' on target '{target}' did not result in any matches", self.pattern);
+            log::info!("Regex '{}' on target '{target}' resulted in no matches", self.pattern);
             return false;
         }
         if let Some(times) = self.times {
@@ -137,11 +137,11 @@ impl RegexPatch {
                 if let Ok(idx) = group_name.parse::<usize>() {
                     groups.get_group(idx)
                         .unwrap_or_else(|| 
-                            panic!("The capture group at index {idx} could not be found in '{base_str}' with the Regex pattern '{}'", self.pattern))
+                            panic!("The capture group at index {idx} could not be found in '{base_str}' with the Regex '{}'", self.pattern))
                 } else {
                     groups.get_group_by_name(&group_name)
                         .unwrap_or_else(|| 
-                            panic!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex pattern '{}'", self.pattern))
+                            panic!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex '{}'", self.pattern))
                 }
             };
 
@@ -150,7 +150,7 @@ impl RegexPatch {
 
             match self.position {
                 InsertPosition::Before => {
-                    rope.insert(target_start - 1, &payload);
+                    rope.insert(target_start, &payload);
                     let new_len = payload.len();
                     delta += new_len as isize;
                 }

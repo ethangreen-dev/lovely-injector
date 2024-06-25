@@ -12,6 +12,9 @@ pub type Priority = i32;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Manifest {
     pub version: String,
+    // Does nothing, kept for legacy compat
+    #[serde(default)]
+    pub dump_lua: bool,
     #[serde(default)]
     pub priority: Priority,
 }
