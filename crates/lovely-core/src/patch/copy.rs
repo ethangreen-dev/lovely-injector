@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use crop::Rope;
 use serde::{Serialize, Deserialize};
 
@@ -29,7 +29,8 @@ impl CopyPatch {
         // Merge the provided payloads into a single buffer. Each source path should
         // be made absolute by the patch loader.
         for source in self.sources.iter() {
-            let contents = super::get_cached_file(source).unwrap_or(super::set_cached_file(source));
+            let contents = fs::read_to_string(source)
+                .unwrap_or_else(|e| panic!("Failed to read patch file at {source:?}: {e:?}"));
 
             // Append or prepend the patch's lines onto the provided buffer.
             match self.position {

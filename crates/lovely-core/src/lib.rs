@@ -395,7 +395,7 @@ impl PatchTable {
         let mut rope = Rope::from(buffer);
 
         // Apply module injection patches.
-        let loadbuffer = self.loadbuffer.as_ref().unwrap();
+        let loadbuffer = self.loadbuffer.unwrap();
         for patch in module_patches {
             let result = unsafe {
                 patch.apply(target, lua_state, &loadbuffer)
