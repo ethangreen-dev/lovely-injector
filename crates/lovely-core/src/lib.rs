@@ -438,7 +438,7 @@ impl PatchTable {
         // TODO I don't think it's necessary to split into lines
         // and convert the rope to Strings? seems overcomplicated
         for line in patched_lines.iter_mut() {
-            patch::apply_var_interp(line, &self.vars);
+            patch::vars::apply_var_interp(line, &self.vars);
         }
 
         let patched = patched_lines.join("\n");
