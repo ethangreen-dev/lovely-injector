@@ -162,8 +162,12 @@ impl Lovely {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr);
         }
 
+        // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
+        let last_byte = *buf_ptr.add(size - 1);
+        let actual_size = if last_byte == 0 { size - 1 } else { size };
+
         // Convert the buffer from cstr ptr, to byte slice, to utf8 str.
-        let buf = slice::from_raw_parts(buf_ptr, (size - 1) as _);
+        let buf = slice::from_raw_parts(buf_ptr, actual_size as _);
         let buf_str = CString::new(buf)
             .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains a non-terminating null char: {e:?}"));
         let buf_str = buf_str.to_str()
