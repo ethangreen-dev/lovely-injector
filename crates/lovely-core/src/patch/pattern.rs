@@ -44,16 +44,16 @@ impl PatternPatch {
             .collect::<Vec<(_, _)>>();
 
         if matches.is_empty() {
-            log::info!("Pattern '{}' on target '{target}' resulted in no matches", self.pattern);
+            log::warn!("Pattern '{}' on target '{target}' resulted in no matches", self.pattern);
             return false;
         }
         if let Some(times) = self.times {
             if matches.len() < times {
-                log::info!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
             }
             if matches.len() > times {
-                log::info!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
-                log::info!("Ignoring excess matches");
+                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::warn!("Ignoring excess matches");
                 matches.truncate(times);
             }
         }

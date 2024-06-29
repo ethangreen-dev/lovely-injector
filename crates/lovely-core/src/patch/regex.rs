@@ -48,16 +48,16 @@ impl RegexPatch {
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::info!("Regex '{}' on target '{target}' resulted in no matches", self.pattern);
+            log::warn!("Regex '{}' on target '{target}' resulted in no matches", self.pattern);
             return false;
         }
         if let Some(times) = self.times {
             if captures.len() < times {
-                log::info!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
             }
             if captures.len() > times {
-                log::info!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
-                log::info!("Ignoring excess matches");
+                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+                log::warn!("Ignoring excess matches");
                 captures.truncate(times);
             }
         }
