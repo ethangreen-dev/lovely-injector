@@ -14,7 +14,7 @@ use log::*;
 use itertools::Itertools;
 use getargs::{Arg, Options};
 use patch::{Patch, PatchFile, Priority};
-use ropey::Rope;
+use crop::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -391,7 +391,7 @@ impl PatchTable {
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
-        let mut rope = Rope::from_str(buffer);
+        let mut rope = Rope::from(buffer);
 
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.as_ref().unwrap();

@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use ropey::Rope;
+use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,15 +34,12 @@ impl CopyPatch {
             // Append or prepend the patch's lines onto the provided buffer.
             match self.position {
                 CopyPosition::Prepend => { 
-                    rope.insert(0, &contents);
-
-                    let last_char = rope.byte_to_char(contents.len());
-                    rope.insert_char(last_char, '\n');
+                    rope.insert(0,&contents);
+                    rope.insert(contents.len(), "\n");
                 },
                 CopyPosition::Append => {
-                    let last_char = rope.len_chars();
-                    rope.insert_char(last_char, '\n');
-                    rope.insert(last_char + 1, &contents);
+                    rope.insert(rope.byte_len(), "\n");
+                    rope.insert(rope.byte_len(), &contents);
                 }
             }
         }

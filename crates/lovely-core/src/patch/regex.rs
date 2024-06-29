@@ -3,7 +3,7 @@ use regex_cursor::engines::meta::Regex;
 use regex_cursor::regex_automata::util::interpolate;
 
 use itertools::Itertools;
-use ropey::Rope;
+use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use super::InsertPosition;
@@ -70,7 +70,7 @@ impl RegexPatch {
             let base_start = (base.start as isize + delta) as usize;
             let base_end = (base.end as isize + delta) as usize;
 
-            let base_str = rope.get_byte_slice(base_start..base_end).unwrap().to_string();
+            let base_str = rope.byte_slice(base_start..base_end).to_string();
 
             // Interpolate capture groups into self.line_prepend, if any capture groups exist within.
             let mut line_prepend = String::new();
@@ -81,7 +81,7 @@ impl RegexPatch {
                     let start = (span.start as isize + delta) as usize;
                     let end = (span.end as isize + delta) as usize;
 
-                    let rope_slice = rope.get_byte_slice(start..end).unwrap();
+                    let rope_slice = rope.byte_slice(start..end);
 
                     dest.push_str(&rope_slice.to_string());
                 },
@@ -114,7 +114,7 @@ impl RegexPatch {
                     let start = (span.start as isize + delta) as usize;
                     let end = (span.end as isize + delta) as usize;
 
-                    let rope_slice = rope.get_byte_slice(start..end).unwrap();
+                    let rope_slice = rope.byte_slice(start..end);
 
                     dest.push_str(&rope_slice.to_string());
                 },
@@ -147,23 +147,20 @@ impl RegexPatch {
             let target_start = (target_group.start as isize + delta) as usize;
             let target_end = (target_group.end as isize + delta) as usize;
 
-            let char_start = rope.byte_to_char(target_start);
-            let char_end = rope.byte_to_char(target_end);
-
             match self.position {
                 InsertPosition::Before => {
-                    rope.insert(char_start - 1, &payload);
+                    rope.insert(target_start - 1, &payload);
                     let new_len = payload.len();
                     delta += new_len as isize;
                 }
                 InsertPosition::After => {
-                    rope.insert(char_end, &payload);
+                    rope.insert(target_end, &payload);
                     let new_len = payload.len();
                     delta += new_len as isize;
                 }
                 InsertPosition::At => {
-                    rope.remove(char_start..char_end);
-                    rope.insert(char_start, &payload);
+                    rope.delete(target_start..target_end);
+                    rope.insert(target_start, &payload);
                     let old_len = target_group.end - target_group.start;
                     let new_len = payload.len();
                     delta -= old_len as isize;

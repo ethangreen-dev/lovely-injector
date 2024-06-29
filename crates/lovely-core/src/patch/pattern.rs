@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use ropey::Rope;
+use crop::Rope;
 use serde::{Serialize, Deserialize};
 use wildmatch::WildMatch;
 
@@ -61,8 +61,8 @@ impl PatternPatch {
         let mut line_delta = 0;
 
         for (line_idx, line) in matches {
-            let start = rope.line_to_char(line_idx + line_delta);
-            let end = start + line.chars().count();
+            let start = rope.byte_of_line(line_idx + line_delta);
+            let end = start + line.len();
             let payload_lines = self.payload.lines().count();
 
             let indent = if self.match_indent {
@@ -89,7 +89,7 @@ impl PatternPatch {
                 }
                 InsertPosition::At => {
                     line_delta += payload_lines - 1;
-                    rope.remove(start..end);
+                    rope.delete(start..end);
                     rope.insert(start, &payload);
                 }
             };
