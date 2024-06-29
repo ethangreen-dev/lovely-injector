@@ -24,19 +24,20 @@ pub enum InsertPosition {
 }
 // This contains the cached contents of one or more source files. We use to reduce 
 // runtime cost as we're now possibly reading from files EVERY line and not all at once.
-static FILE_CACHE: Lazy<Mutex<HashMap<PathBuf, Cow<String>>>> = Lazy::new(Default::default);
+static FILE_CACHE: Lazy<Mutex<HashMap<PathBuf, String>>> = Lazy::new(Default::default);
+// TODO FILE_CACHE tried to use a Cow<str> instead of String, why?
 
-pub(crate) fn get_cached_file(path: &PathBuf) -> Option<Cow<String>> {
+pub(crate) fn get_cached_file(path: &PathBuf) -> Option<String> {
     FILE_CACHE.lock().unwrap().get(path).cloned()
 }
 
-pub(crate) fn set_cached_file(path: &PathBuf) -> Cow<String> {
+pub(crate) fn set_cached_file(path: &PathBuf) -> String {
     let contents = fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("Failed to read patch file at {path:?}: {e:?}"));
     let mut locked = FILE_CACHE.lock().unwrap();
 
-    locked.insert(path.clone(), Cow::Owned(contents));
-    locked.get(path).cloned().unwrap()
+    locked.insert(path.clone(), contents.clone());
+    contents
 }
 
 /// Apply valid var interpolations to the provided line.
