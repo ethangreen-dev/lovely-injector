@@ -4,20 +4,18 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ## Manual Installation
 
-**Tip:** You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-
 ### Windows + Proton / Wine
 
-1. Download the latest release for Windows. This will be `lovely-x86_64-pc-windows-msvc.zip`.
-2. Open the .zip archive, copy `version.dll` into the game directory.
+1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Windows. This will be `lovely-x86_64-pc-windows-msvc.zip`.
+2. Open the .zip archive, copy `version.dll` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 3. Put one or more mods into the mod directory (NOT the same as the game directory). This should be `%AppData%/Balatro/Mods` (if you are modding Balatro).
 4. **<ins>Only Steam Deck / Proton / Wine</ins>** Set your game's launch options in Steam to `WINEDLLOVERRIDES="version=n,b" %command%`.
 5. Run the game through Steam.
 
 ### Mac
 
-1. Download the latest release for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
-2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory.
+1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
+2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 3. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
 If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
 4. Run the game by either dragging and dropping `run_lovely.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely.sh` in the terminal within the game directory.
@@ -34,7 +32,6 @@ Note: You cannot run your game through Steam on Mac due to a bug within the Stea
 ```toml
 [manifest]
 version = "1.0.0"
-dump_lua = true
 priority = 0
 
 # Define a var substitution rule. This searches for lines that contain {{lovely:var_name}} 
@@ -62,6 +59,7 @@ initSteamodded()
 print('{{lovely:var_name}}')
 '''
 match_indent = true
+times = 1
 
 # Inject one or more lines of code before, after, at, or interwoven into one or more 
 # Regex capture groups.
@@ -89,6 +87,7 @@ if res then
     return res
 elseif $cond
 '''
+times = 1
 
 # Append or prepend the contents of one or more files onto the target.
 #
@@ -139,6 +138,4 @@ Lovely dumps patched lua source files to `MOD_DIR/lovely/dump`. Logs are likewis
 
 ## Not yet implemented
 
-- `manifest.priority`
-- `manifest.dump_lua`
 - `manifest.version`

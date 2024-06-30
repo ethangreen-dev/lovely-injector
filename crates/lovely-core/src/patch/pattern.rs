@@ -1,4 +1,5 @@
-use ropey::Rope;
+use itertools::Itertools;
+use crop::Rope;
 use serde::{Serialize, Deserialize};
 use wildmatch::WildMatch;
 
@@ -15,9 +16,11 @@ pub struct PatternPatch {
     // The position to insert the target at. `PatternAt::At` replaces the matched line entirely.
     pub position: InsertPosition,
     pub target: String,
-    pub payload_files: Option<Vec<String>>,
+    // pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
+    // Apply patch at most `times` times, warn if the number of matches differs from `times`.
+    pub times: Option<usize>,
 
     /// We keep this field around for legacy compat. It doesn't do anything (and never has).
     #[serde(default)]
@@ -33,23 +36,34 @@ impl PatternPatch {
         }
 
         let wm = WildMatch::new(&self.pattern);
-        let matches = rope
-            .lines()
+        let mut matches = rope
+            .raw_lines()
             .enumerate()
             .map(|(i, line)| (i, line.to_string()))
             .filter(|(_, line)| wm.matches(line.trim()))
             .collect::<Vec<(_, _)>>();
 
         if matches.is_empty() {
+            log::warn!("Pattern '{}' on target '{target}' resulted in no matches", self.pattern);
             return false;
+        }
+        if let Some(times) = self.times {
+            if matches.len() < times {
+                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+            }
+            if matches.len() > times {
+                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::warn!("Ignoring excess matches");
+                matches.truncate(times);
+            }
         }
 
         // Track the +/- index offset caused by previous line injections.
         let mut line_delta = 0;
 
         for (line_idx, line) in matches {
-            let start = rope.line_to_char(line_idx + line_delta);
-            let end = start + line.chars().count();
+            let start = rope.byte_of_line(line_idx + line_delta);
+            let end = start + line.len();
             let payload_lines = self.payload.lines().count();
 
             let indent = if self.match_indent {
@@ -58,31 +72,26 @@ impl PatternPatch {
                 String::new()
             };
 
-            let payload = self.payload.split('\n')
+            let mut payload = self.payload.split('\n')
                 .map(|x| format!("{indent}{x}"))
-                .collect::<Vec<_>>()
                 .join("\n");
+            if !self.payload.ends_with('\n') {
+                payload.push('\n');
+            }
 
-            let newline = if self.payload.ends_with('\n') {
-                ""
-            } else {
-                "\n"
-            };
-
-            let new_payload = format!("{payload}{newline}");
             match self.position {
                 InsertPosition::Before => { 
                     line_delta += payload_lines;
-                    rope.insert(start, &new_payload);
+                    rope.insert(start, &payload);
                 }
                 InsertPosition::After => {
                     line_delta += payload_lines;
-                    rope.insert(end, &new_payload);
+                    rope.insert(end, &payload);
                 }
                 InsertPosition::At => {
                     line_delta += payload_lines - 1;
-                    rope.remove(start..end);
-                    rope.insert(start, &new_payload);
+                    rope.delete(start..end);
+                    rope.insert(start, &payload);
                 }
             };
         }

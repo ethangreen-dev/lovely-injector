@@ -11,16 +11,15 @@ use std::path::{Path, PathBuf};
 
 use log::*;
 
+use itertools::Itertools;
 use getargs::{Arg, Options};
-use manifest::Patch;
-use ropey::Rope;
+use patch::{Patch, PatchFile, Priority};
+use crop::Rope;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
-use crate::manifest::PatchManifest;
-
+pub mod chunk_vec_cursor;
 pub mod sys;
-pub mod manifest;
 pub mod log;
 pub mod patch;
 
@@ -39,7 +38,7 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
         let start = Instant::now();
 
-        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        let args = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
         let cur_exe = env::current_exe()
             .expect("Failed to get the path of the current executable.");
@@ -199,9 +198,10 @@ pub struct PatchTable {
     mod_dir: PathBuf,
     loadbuffer: Option<&'static LoadBuffer>,
     targets: HashSet<String>,
-    patches: Vec<Patch>,
+    // Unsorted
+    patches: Vec<(Patch, Priority)>,
     vars: HashMap<String, String>,
-    args: HashMap<String, String>,
+    // args: HashMap<String, String>,
 }
 
 impl PatchTable {
@@ -244,16 +244,16 @@ impl PatchTable {
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().unwrap() == "toml")
-                        .collect::<Vec<_>>();
+                        .collect_vec();
                     toml_files.append(&mut subfiles);
                 }
 
                 toml_files
             })
-            .collect::<Vec<_>>();
+            .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
-        let mut patches: Vec<Patch> = Vec::new();
+        let mut patches: Vec<(Patch, Priority)> = Vec::new();
         let mut var_table: HashMap<String, String> = HashMap::new();
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
@@ -267,7 +267,7 @@ impl PatchTable {
                 patch_dir
             };
 
-            let mut patch: PatchManifest = {
+            let mut patch_file: PatchFile = {
                 let str = fs::read_to_string(&patch_file)
                     .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
 
@@ -284,7 +284,7 @@ impl PatchTable {
 
             // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
             // We also cache patch targets to short-circuit patching for files that don't need it.
-            for patch in &mut patch.patches[..] {
+            for patch in &mut patch_file.patches[..] {
                 match patch {
                     Patch::Copy(ref mut x) => {
                         x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
@@ -303,9 +303,15 @@ impl PatchTable {
                 }
             }
 
-            let inner_patches = patch.patches.as_mut(); 
-            patches.append(inner_patches);
-            var_table.extend(patch.vars);
+            let priority = patch_file.manifest.priority;
+            patches.extend(
+                patch_file
+                    .patches
+                    .into_iter()
+                    .map(|patch| (patch, priority)),
+            );
+            // TODO concerned about var name conflicts
+            var_table.extend(patch_file.vars);
         }
 
         PatchTable {
@@ -313,7 +319,7 @@ impl PatchTable {
             loadbuffer: None,
             targets,
             vars: var_table,
-            args: HashMap::new(),
+            // args: HashMap::new(),
             patches,
         }
     }
@@ -359,42 +365,37 @@ impl PatchTable {
         let module_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Module(patch) => Some(patch),
+            .filter_map(|(x, prio)| match x {
+                Patch::Module(patch) => Some((patch, prio)),
                 _ => None,
             })
-            .collect::<Vec<_>>();
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
         let copy_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Copy(patch) => Some(patch),
+            .filter_map(|(x, prio)| match x {
+                Patch::Copy(patch) => Some((patch, prio)),
                 _ => None
             })
-            .collect::<Vec<_>>();
-        let pattern_patches = self
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
+        let pattern_or_regex_patches = self
             .patches
             .iter()
-            .filter_map(|x| match x {
-                Patch::Pattern(patch) => Some(patch),
+            .filter_map(|(x, prio)| match x {
+                Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio)),
                 _ => None
             })
-            .collect::<Vec<_>>();
-        let regex_patches = self
-            .patches
-            .iter()
-            .filter_map(|x| match x {
-                Patch::Regex(patch) => Some(patch),
-                _ => None
-            })
-            .collect::<Vec<_>>();
+            .sorted_by_key(|(_, &prio)| prio)
+            .map(|(x, _)| x);
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
-        let mut rope = Rope::from_str(buffer);
+        let mut rope = Rope::from(buffer);
 
         // Apply module injection patches.
-        let loadbuffer = self.loadbuffer.as_ref().unwrap();
+        let loadbuffer = self.loadbuffer.unwrap();
         for patch in module_patches {
             let result = unsafe {
                 patch.apply(target, lua_state, &loadbuffer)
@@ -412,26 +413,32 @@ impl PatchTable {
             }
         }
 
-        for patch in pattern_patches {
-            if patch.apply(target, &mut rope) {
-                patch_count += 1;
+        for patch in pattern_or_regex_patches {
+            match patch {
+                Patch::Pattern(patch) => {
+                    if patch.apply(target, &mut rope) {
+                        patch_count += 1;
+                    }
+                },
+                Patch::Regex(patch) => {
+                    if patch.apply(target, &mut rope) {
+                        patch_count += 1;
+                    }
+                },
+                _ => unreachable!()
             }
         }
 
-        for patch in regex_patches {
-            if patch.apply(target, &mut rope) {
-                patch_count += 1;
-            }
-        }  
-
         let mut patched_lines = {
             let inner = rope.to_string();
-            inner.split('\n').map(String::from).collect::<Vec<_>>()
+            inner.split('\n').map(String::from).collect_vec()
         };
 
         // Apply variable interpolation.
+        // TODO I don't think it's necessary to split into lines
+        // and convert the rope to Strings? seems overcomplicated
         for line in patched_lines.iter_mut() {
-            patch::apply_var_interp(line, &self.vars);
+            patch::vars::apply_var_interp(line, &self.vars);
         }
 
         let patched = patched_lines.join("\n");

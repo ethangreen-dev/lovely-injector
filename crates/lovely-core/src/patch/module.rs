@@ -1,4 +1,4 @@
-use std::{ffi::CString, path::PathBuf};
+use std::{ffi::CString, fs, path::PathBuf};
 
 use crate::sys::{self, LuaState};
 use serde::{Serialize, Deserialize};
@@ -29,8 +29,9 @@ impl ModulePatch {
         }
 
         // Read the source file in, converting it to a CString and computing its nulled length.
-        let source = super::get_cached_file(&self.source)
-            .unwrap_or(super::set_cached_file(&self.source));
+        let source = fs::read_to_string(&self.source)
+            .unwrap_or_else(|e| panic!("Failed to read patch file at {:?}: {e:?}", &self.source));
+
 
         let buf_cstr = CString::new(source.as_str()).unwrap();
         let buf_len = buf_cstr.as_bytes().len();
