@@ -379,7 +379,7 @@ checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
 name = "lovely-core"
-version = "0.5.0-beta6"
+version = "0.5.0-beta7"
 dependencies = [
  "chrono",
  "crop",
