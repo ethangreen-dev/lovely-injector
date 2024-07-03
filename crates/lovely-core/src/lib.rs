@@ -65,14 +65,14 @@ impl Lovely {
             .join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
-        
+
         log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
-        
+
         let version = env!("CARGO_PKG_VERSION");
         info!("Lovely {version}");
 
         let mut is_vanilla = false;
-    
+
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
             match opt {
                 Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
@@ -97,7 +97,7 @@ impl Lovely {
         // Validate that an older Lovely install doesn't already exist within the game directory.
         let exe_path = env::current_exe().unwrap();
         let game_dir = exe_path.parent().unwrap();
-        let dwmapi = game_dir.join("dwmapi.dll"); 
+        let dwmapi = game_dir.join("dwmapi.dll");
 
         if dwmapi.is_file() {
             panic!(
@@ -108,12 +108,12 @@ impl Lovely {
 
         info!("Game directory is at {game_dir:?}");
         info!("Writing logs to {log_dir:?}");
-    
+
         if !mod_dir.is_dir() {
             info!("Creating mods directory at {mod_dir:?}");
             fs::create_dir_all(&mod_dir).unwrap();
         }
-    
+
         info!("Using mod directory at {mod_dir:?}");
         let patch_table = PatchTable::load(&mod_dir)
             .with_loadbuffer(loadbuffer);
@@ -124,7 +124,7 @@ impl Lovely {
             fs::remove_dir_all(&dump_dir)
                 .unwrap_or_else(|e| panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}"));
         }
-        
+
         info!("Initialization complete in {}ms", start.elapsed().as_millis());
 
         Lovely {
@@ -137,7 +137,7 @@ impl Lovely {
     }
 
     /// Apply patches onto the raw buffer.
-    /// 
+    ///
     /// # Safety
     /// This function is unsafe because
     /// - It interacts and manipulates memory directly through native pointers
@@ -162,7 +162,7 @@ impl Lovely {
         }
 
         // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
-        let last_byte = *buf_ptr.add(size - 1);
+        let last_byte = *buf_ptr.add((size - 1) as usize);
         let actual_size = if last_byte == 0 { size - 1 } else { size };
 
         // Convert the buffer from cstr ptr, to byte slice, to utf8 str.
@@ -263,7 +263,7 @@ impl PatchTable {
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
         for patch_file in patch_files {
             let patch_dir = patch_file.parent().unwrap();
-            
+
             // Determine the mod directory from the location of the lovely patch file.
             let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
                 patch_dir.parent().unwrap()
@@ -452,7 +452,7 @@ impl PatchTable {
         } else {
             info!("Applied {patch_count} patches to '{target}'");
         }
-        
+
         // Compute the integrity hash of the patched file.
         let mut hasher = Sha256::new();
         hasher.update(patched.as_bytes());
