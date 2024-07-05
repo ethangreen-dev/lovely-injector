@@ -162,7 +162,7 @@ impl Lovely {
         }
 
         // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
-        let last_byte = *buf_ptr.add((size - 1) as usize);
+        let last_byte = *buf_ptr.offset(size - 1);
         let actual_size = if last_byte == 0 { size - 1 } else { size };
 
         // Convert the buffer from cstr ptr, to byte slice, to utf8 str.

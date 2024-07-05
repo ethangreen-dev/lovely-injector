@@ -1,4 +1,7 @@
-use std::{ffi::{c_void, CString}, slice};
+use std::{
+    ffi::{c_void, CString},
+    slice,
+};
 
 use libc::FILE;
 use libloading::{Library, Symbol};
@@ -12,110 +15,68 @@ pub const LUA_TBOOLEAN: isize = 1;
 
 pub type LuaState = c_void;
 
-
 #[cfg(target_os = "windows")]
-pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
-    unsafe {
-        Library::new("lua51.dll").unwrap()
-    }
-});
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| unsafe { Library::new("lua51.dll").unwrap() });
 
 #[cfg(target_os = "macos")]
-pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
-    unsafe {
-        Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
-    }
-});
+pub static LUA_LIB: Lazy<Library> =
+    Lazy::new(|| unsafe { Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap() });
 
+pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_call").unwrap() });
 
-pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_call").unwrap()
-    }
-});
+pub static lua_pcall: Lazy<
+    Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize, isize) -> isize>,
+> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pcall").unwrap() });
 
-pub static lua_pcall: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize, isize) -> isize>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_pcall").unwrap()
-    }
-});
+pub static lua_getfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_getfield").unwrap() });
 
-pub static lua_getfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_getfield").unwrap()
-    }
-});
+pub static lua_setfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_setfield").unwrap() });
 
-pub static lua_setfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_setfield").unwrap()
-    }
-});
+pub static lua_gettop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState) -> isize>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_gettop").unwrap() });
 
-pub static lua_gettop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState) -> isize>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_gettop").unwrap()
-    }
-});
+pub static lua_settop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_settop").unwrap() });
 
-pub static lua_settop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_settop").unwrap()
-    }
-});
+pub static lua_pushvalue: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize)>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pushvalue").unwrap() });
 
-pub static lua_pushvalue: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize)>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_pushvalue").unwrap()
-    }
-});
+pub static lua_pushcclosure: Lazy<
+    Symbol<unsafe extern "C" fn(*mut LuaState, *const c_void, isize)>,
+> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pushcclosure").unwrap() });
 
-pub static lua_pushcclosure: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, *const c_void, isize)>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_pushcclosure").unwrap()
-    }
-});
+pub static lua_tolstring: Lazy<
+    Symbol<unsafe extern "C" fn(*mut LuaState, isize, *mut isize) -> *const char>,
+> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_tolstring").unwrap() });
 
-pub static lua_tolstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *mut isize) -> *const char>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_tolstring").unwrap()
-    }
-});
+pub static lua_toboolean: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> bool>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_toboolean").unwrap() });
 
-pub static lua_toboolean: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> bool>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_toboolean").unwrap()
-    }
-});
+pub static lua_topointer: Lazy<
+    Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const c_void>,
+> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_topointer").unwrap() });
 
-pub static lua_topointer: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const c_void>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_topointer").unwrap()
-    }
-});
+pub static lua_type: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_type").unwrap() });
 
-pub static lua_type: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_type").unwrap()
-    }
-});
+pub static lua_typename: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const char>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_typename").unwrap() });
 
-pub static lua_typename: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const char>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_typename").unwrap()
-    }
-});
-
-pub static lua_isstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> = Lazy::new(|| {
-    unsafe {
-        LUA_LIB.get(b"lua_isstring").unwrap()
-    }
-});
+pub static lua_isstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_isstring").unwrap() });
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
 /// Makes a lot of FFI calls, mutates internal C lua state.
-pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(state: *mut LuaState, name: &str, buffer: &str, lual_loadbuffer: &F) {
+pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(
+    state: *mut LuaState,
+    name: &str,
+    buffer: &str,
+    lual_loadbuffer: &F,
+) {
     let buf_cstr = CString::new(buffer).unwrap();
     let buf_len = buf_cstr.as_bytes().len();
 
@@ -131,7 +92,12 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u
     let field_index = lua_gettop(state);
 
     // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-    lual_loadbuffer(state, buf_cstr.into_raw() as _, buf_len as _, p_name_cstr.into_raw() as _);
+    lual_loadbuffer(
+        state,
+        buf_cstr.into_raw() as _,
+        buf_len as _,
+        p_name_cstr.into_raw() as _,
+    );
 
     lua_pcall(state, 0, -1, 0);
 
@@ -150,13 +116,13 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     let mut out = String::new();
 
     for i in 0..argc {
-        let mut str_len = 0_isize; 
+        let mut str_len = 0_isize;
         let arg_str = lua_tolstring(state, -1, &mut str_len);
         if arg_str.is_null() {
             out.push_str("[G] nil");
             continue;
         }
-        
+
         let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
         let arg_str = String::from_utf8_lossy(str_buf);
 

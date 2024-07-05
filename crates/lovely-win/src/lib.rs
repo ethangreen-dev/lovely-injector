@@ -47,8 +47,8 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
-    let args = env::args().collect_vec();
-    if !args.contains(&"--disable-console".to_string()) {
+    let args = env::args().collect::<Vec<_>>();
+    if !args.contains(&"--disable-console".to_string()) { 
         let _ = AllocConsole();
     }
 
