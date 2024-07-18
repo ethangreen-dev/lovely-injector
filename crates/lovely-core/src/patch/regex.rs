@@ -109,24 +109,23 @@ impl RegexPatch {
             );
 
             // Prepend each line of the payload with line_prepend.
-            let new_payload = self
+            let mut new_payload = self
                 .payload
                 .split_inclusive('\n')
                 .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
                 .to_string();
 
+            match self.position {
+                InsertPosition::At => (),
+                _ => if !self.payload.ends_with('\n')  {
+                    new_payload.push('\n');
+                }
+            }
+
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
             // implementation seems to be broken when working with ropes.
-            let mut payload = if let InsertPosition::After = self.position {
-                if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
-                    String::from('\n')
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            };
+            let mut payload = String::new();
             interpolate::string(
                 &new_payload,
                 |index, dest| {
@@ -144,11 +143,6 @@ impl RegexPatch {
                 },
                 &mut payload
             );
-            if let InsertPosition::Before = self.position {
-                if !self.payload.ends_with('\n')  {
-                    payload.push('\n');
-                }
-            }
 
             // Cleanup and convert the specified root capture to a span.
             let target_group = {
