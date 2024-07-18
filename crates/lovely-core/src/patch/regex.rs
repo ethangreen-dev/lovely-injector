@@ -120,7 +120,7 @@ impl RegexPatch {
             // implementation seems to be broken when working with ropes.
             let mut payload = String::new();
             if let InsertPosition::After = self.position {
-                if !self.payload.starts_with('\n') {
+                if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
                     payload.push('\n');
                 }
             }

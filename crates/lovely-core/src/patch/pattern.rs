@@ -87,7 +87,7 @@ impl PatternPatch {
                 String::new()
             };
             let mut payload = String::new();
-            if !self.payload.starts_with('\n') {
+            if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
                 payload.push('\n');
             }
             payload.push_str(
