@@ -1,3 +1,4 @@
+use regex_cursor::regex_automata::meta::Config;
 use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
 use regex_cursor::regex_automata::util::syntax;
@@ -8,7 +9,12 @@ use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
+
 use super::InsertPosition;
+
+fn const_true() -> bool {
+    true
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RegexPatch {
@@ -35,6 +41,14 @@ pub struct RegexPatch {
 
     // Apply patch at most `times` times, warn if the number of matches differs from `times`.
     pub times: Option<usize>,
+
+    // If enabled (default), regex pattern is implicitly anchored to line boundaries
+    #[serde(default = "const_true")]
+    pub anchored: bool,
+
+    // If enabled, whitespace is ignored unless escaped or in some constructs
+    #[serde(default)]
+    pub verbose: bool,
 }
 
 impl RegexPatch {
@@ -44,13 +58,20 @@ impl RegexPatch {
         }
 
         let input = Input::new(rope.into_cursor());
+        let pattern = if self.anchored {
+            let pat = &self.pattern;
+            format!("^{}$", pat)
+        } else {
+            String::from(&self.pattern)
+        };
         let re = Regex::builder()
             .syntax(
                  syntax::Config::new()
                     .multi_line(true)
                     .crlf(true)
+                    .ignore_whitespace(self.verbose)
             )
-            .build(&self.pattern)
+            .build(&pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex '{}': {e:?}", self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
