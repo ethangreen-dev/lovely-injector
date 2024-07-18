@@ -12,10 +12,6 @@ use crate::chunk_vec_cursor::IntoCursor;
 
 use super::InsertPosition;
 
-fn const_true() -> bool {
-    true
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RegexPatch {
     pub target: String,
@@ -42,10 +38,6 @@ pub struct RegexPatch {
     // Apply patch at most `times` times, warn if the number of matches differs from `times`.
     pub times: Option<usize>,
 
-    // If enabled (default), regex pattern is implicitly anchored to line boundaries
-    #[serde(default = "const_true")]
-    pub anchored: bool,
-
     // If enabled, whitespace is ignored unless escaped or in some constructs
     #[serde(default)]
     pub verbose: bool,
@@ -58,12 +50,6 @@ impl RegexPatch {
         }
 
         let input = Input::new(rope.into_cursor());
-        let pattern = if self.anchored {
-            let pat = &self.pattern;
-            format!("^{}$", pat)
-        } else {
-            String::from(&self.pattern)
-        };
         let re = Regex::builder()
             .syntax(
                  syntax::Config::new()
@@ -71,7 +57,7 @@ impl RegexPatch {
                     .crlf(true)
                     .ignore_whitespace(self.verbose)
             )
-            .build(&pattern)
+            .build(&self.pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex '{}': {e:?}", self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
@@ -133,6 +119,11 @@ impl RegexPatch {
             // We must use this method instead of Captures::interpolate_string because that
             // implementation seems to be broken when working with ropes.
             let mut payload = String::new();
+            if let InsertPosition::After = self.position {
+                if !self.payload.starts_with('\n') {
+                    payload.push('\n');
+                }
+            }
             interpolate::string(
                 &new_payload,
                 |index, dest| {
@@ -150,6 +141,11 @@ impl RegexPatch {
                 },
                 &mut payload
             );
+            if let InsertPosition::Before = self.position {
+                if !self.payload.ends_with('\n')  {
+                    payload.push('\n');
+                }
+            }
 
             // Cleanup and convert the specified root capture to a span.
             let target_group = {

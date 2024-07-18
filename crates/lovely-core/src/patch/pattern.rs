@@ -1,6 +1,6 @@
-use itertools::Itertools;
 use crop::Rope;
-use serde::{Serialize, Deserialize};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
 use super::InsertPosition;
@@ -44,15 +44,28 @@ impl PatternPatch {
             .collect::<Vec<(_, _)>>();
 
         if matches.is_empty() {
-            log::warn!("Pattern '{}' on target '{target}' resulted in no matches", self.pattern);
+            log::warn!(
+                "Pattern '{}' on target '{target}' resulted in no matches",
+                self.pattern
+            );
             return false;
         }
         if let Some(times) = self.times {
             if matches.len() < times {
-                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::warn!(
+                    "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                    self.pattern,
+                    matches.len(),
+                    times
+                );
             }
             if matches.len() > times {
-                log::warn!("Pattern '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, matches.len(), times);
+                log::warn!(
+                    "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                    self.pattern,
+                    matches.len(),
+                    times
+                );
                 log::warn!("Ignoring excess matches");
                 matches.truncate(times);
             }
@@ -67,20 +80,33 @@ impl PatternPatch {
             let payload_lines = self.payload.lines().count();
 
             let indent = if self.match_indent {
-                line.chars().take_while(|x| *x == ' ' || *x == '\t').collect::<String>()
+                line.chars()
+                    .take_while(|x| *x == ' ' || *x == '\t')
+                    .collect::<String>()
             } else {
                 String::new()
             };
-
-            let mut payload = self.payload.split_inclusive('\n')
-                .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
-                .to_string();
-            if !self.payload.ends_with('\n') {
-                payload.push('\n');
+            let mut payload = String::new();
+            if let InsertPosition::After = self.position {
+                if !self.payload.starts_with('\n') {
+                    payload.push('\n');
+                }
+            }
+            payload.push_str(
+                &self
+                    .payload
+                    .split_inclusive('\n')
+                    .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
+                    .to_string(),
+            );
+            if let InsertPosition::Before = self.position {
+                if !self.payload.ends_with('\n') {
+                    payload.push('\n');
+                }
             }
 
             match self.position {
-                InsertPosition::Before => { 
+                InsertPosition::Before => {
                     line_delta += payload_lines;
                     rope.insert(start, &payload);
                 }
