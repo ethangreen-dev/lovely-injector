@@ -77,7 +77,6 @@ impl PatternPatch {
         for (line_idx, line) in matches {
             let start = rope.byte_of_line(line_idx + line_delta);
             let end = start + line.len();
-            let payload_lines = self.payload.lines().count();
 
             let indent = if self.match_indent {
                 line.chars()
@@ -86,15 +85,12 @@ impl PatternPatch {
             } else {
                 String::new()
             };
-            let mut payload = if let InsertPosition::After = self.position {
+            let mut payload =
                 if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
                     String::from('\n')
                 } else {
                     String::new()
-                }
-            } else {
-                String::new()
-            };
+                };
             payload.push_str(
                 &self
                     .payload
@@ -102,11 +98,10 @@ impl PatternPatch {
                     .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
                     .to_string(),
             );
-            if let InsertPosition::Before = self.position {
-                if !self.payload.ends_with('\n') {
-                    payload.push('\n');
-                }
+            if !self.payload.ends_with('\n') {
+                payload.push('\n');
             }
+            let payload_lines = payload.lines().count();
 
             match self.position {
                 InsertPosition::Before => {
