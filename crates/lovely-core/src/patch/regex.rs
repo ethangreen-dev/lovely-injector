@@ -1,5 +1,6 @@
 use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
+use regex_cursor::regex_automata::util::syntax;
 use regex_cursor::regex_automata::util::interpolate;
 
 use itertools::Itertools;
@@ -43,7 +44,13 @@ impl RegexPatch {
         }
 
         let input = Input::new(rope.into_cursor());
-        let re = Regex::new(&self.pattern)
+        let re = Regex::builder()
+            .syntax(
+                 syntax::Config::new()
+                    .multi_line(true)
+                    .crlf(true)
+            )
+            .build(&self.pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex '{}': {e:?}", self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
