@@ -86,10 +86,15 @@ impl PatternPatch {
             } else {
                 String::new()
             };
-            let mut payload = String::new();
-            if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
-                payload.push('\n');
-            }
+            let mut payload = if let InsertPosition::After = self.position {
+                if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
+                    String::from('\n')
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
             payload.push_str(
                 &self
                     .payload
@@ -97,8 +102,10 @@ impl PatternPatch {
                     .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
                     .to_string(),
             );
-            if !self.payload.ends_with('\n') {
-                payload.push('\n');
+            if let InsertPosition::Before = self.position {
+                if !self.payload.ends_with('\n') {
+                    payload.push('\n');
+                }
             }
 
             match self.position {

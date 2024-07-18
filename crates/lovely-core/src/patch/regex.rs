@@ -118,12 +118,15 @@ impl RegexPatch {
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
             // implementation seems to be broken when working with ropes.
-            let mut payload = String::new();
-            if let InsertPosition::After = self.position {
+            let mut payload = if let InsertPosition::After = self.position {
                 if !self.payload.starts_with('\n') && !self.payload.starts_with("\r\n") {
-                    payload.push('\n');
+                    String::from('\n')
+                } else {
+                    String::new()
                 }
-            }
+            } else {
+                String::new()
+            };
             interpolate::string(
                 &new_payload,
                 |index, dest| {
