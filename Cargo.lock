@@ -401,11 +401,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "lovely-mac"
+name = "lovely-unix"
 version = "0.1.0"
 dependencies = [
  "ctor",
- "libc",
  "lovely-core",
  "once_cell",
 ]

@@ -1,4 +1,4 @@
-use lovely_core::sys::LuaState;
+use lovely_core::sys::{LuaState, LUA_LIB};
 
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
@@ -6,18 +6,7 @@ use once_cell::sync::{Lazy, OnceCell};
 static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
 static RECALL: Lazy<unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32> = Lazy::new(|| unsafe {
-    let handle = libc::dlopen(b"../Frameworks/Lua.framework/Versions/A/Lua\0".as_ptr() as _, libc::RTLD_LAZY);
-    
-    if handle.is_null() {
-        panic!("Failed to load lua");
-    }
-    let ptr = libc::dlsym(handle, b"luaL_loadbuffer\0".as_ptr() as _);
-    
-    if ptr.is_null() {
-        panic!("Failed to load luaL_loadbuffer");
-    }
-    std::mem::transmute::<_, unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(ptr)
-    
+    *LUA_LIB.get(b"luaL_loadbuffer").unwrap()
 });
 
 #[no_mangle]
