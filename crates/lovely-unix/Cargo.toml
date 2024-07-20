@@ -1,5 +1,5 @@
 [package]
-name = "lovely-mac"
+name = "lovely-unix"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 lovely-core = { version ="0.6.0", path = "../lovely-core" }
 
-libc = "0.2.153"
 once_cell = "1.19.0"
 ctor = "0.2.7"
 

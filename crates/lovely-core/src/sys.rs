@@ -1,5 +1,7 @@
 use std::{
-    collections::VecDeque, ffi::{c_void, CString}, ptr, slice
+    collections::VecDeque,
+    ffi::{c_void, CString},
+    ptr, slice,
 };
 
 use itertools::Itertools;
@@ -24,6 +26,10 @@ pub static LUA_LIB: Lazy<Library> =
 
 pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> =
     Lazy::new(|| unsafe { LUA_LIB.get(b"lua_call").unwrap() });
+
+#[cfg(target_os = "linux")]
+pub static LUA_LIB: Lazy<Library> =
+    Lazy::new(|| unsafe { Library::new("libluajit-5.1.so.2").unwrap() });
 
 pub static lua_pcall: Lazy<
     Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize, isize) -> isize>,
@@ -120,7 +126,6 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     let mut out = VecDeque::new();
 
     for _ in 0..argc {
-
         // We call Lua's builtin tostring function because we don't have access to the 5.3 luaL_tolstring
         // helper function. It's not pretty, but it works.
         lua_getfield(state, LUA_GLOBALSINDEX, b"tostring\0".as_ptr() as _);
@@ -137,9 +142,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
         lua_settop(state, -(1) - 1);
     }
 
-    let msg = out
-        .into_iter()
-        .join("\t");
+    let msg = out.into_iter().join("\t");
 
     info!("[G] {msg}");
 
