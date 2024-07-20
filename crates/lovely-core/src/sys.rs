@@ -27,6 +27,13 @@ pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
     }
 });
 
+#[cfg(target_os = "linux")]
+pub static LUA_LIB: Lazy<Library> = Lazy::new(|| {
+    unsafe {
+        Library::new("libluajit-5.1.so.2").unwrap()
+    }
+});
+
 
 pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> = Lazy::new(|| {
     unsafe {
