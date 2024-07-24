@@ -34,19 +34,58 @@ impl PatternPatch {
         if self.target != target {
             return false;
         }
+        if self.target.is_empty() {
+            return false;
+        }
 
-        let wm = WildMatch::new(&self.pattern);
-        let mut matches = rope
-            .raw_lines()
-            .enumerate()
-            .map(|(i, line)| (i, line.to_string()))
-            .filter(|(_, line)| wm.matches(line.trim()))
-            .collect::<Vec<(_, _)>>();
+        let wm_lines = self
+            .pattern
+            .lines()
+            .map(|x| x.trim_end())
+            .map(WildMatch::new)
+            .collect::<Vec<_>>();
+        if wm_lines.is_empty() {
+            log::warn!("Pattern on target '{target}' has no lines");
+            return false;
+        }
+        let wm_lines_len = wm_lines.len();
+
+        let mut line_index = 0usize;
+        let rope_lines = rope.raw_lines().map(|x| x.to_string()).collect::<Vec<_>>();
+        let mut matches = Vec::new();
+        while let Option::Some(rope_window) = rope_lines.get(line_index..line_index + wm_lines_len)
+        {
+            if rope_window
+                .iter()
+                .zip(wm_lines.iter())
+                .all(|(source, target)| target.matches(source.trim()))
+            {
+                matches.push((
+                    line_index,
+                    if self.match_indent {
+                        String::from_utf8(
+                            rope_window[0]
+                                .bytes()
+                                .take_while(|x| *x == b' ' || *x == b'\t')
+                                .collect::<Vec<_>>(),
+                        )
+                        .expect(
+                            "String should consist of only \' \' and \'\\t\', which are both ASCII and therefore valid unicode",
+                        )
+                    } else {
+                        String::new()
+                    },
+                ));
+                line_index += wm_lines.len();
+            } else {
+                line_index += 1;
+            }
+        }
 
         if matches.is_empty() {
             log::warn!(
                 "Pattern '{}' on target '{target}' resulted in no matches",
-                self.pattern
+                self.pattern.escape_debug()
             );
             return false;
         }
@@ -54,7 +93,7 @@ impl PatternPatch {
             if matches.len() < times {
                 log::warn!(
                     "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                    self.pattern,
+                    self.pattern.escape_debug(),
                     matches.len(),
                     times
                 );
@@ -62,7 +101,7 @@ impl PatternPatch {
             if matches.len() > times {
                 log::warn!(
                     "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                    self.pattern,
+                    self.pattern.escape_debug(),
                     matches.len(),
                     times
                 );
@@ -74,25 +113,15 @@ impl PatternPatch {
         // Track the +/- index offset caused by previous line injections.
         let mut line_delta = 0;
 
-        for (line_idx, line) in matches {
+        for (line_idx, indent) in matches {
             let start = rope.byte_of_line(line_idx + line_delta);
-            let end = start + line.len();
+            let end = rope.byte_of_line(line_idx + line_delta + wm_lines_len);
 
-            let indent = if self.match_indent {
-                line.chars()
-                    .take_while(|x| *x == ' ' || *x == '\t')
-                    .collect::<String>()
-            } else {
-                String::new()
-            };
-            let mut payload = String::new();
-            payload.push_str(
-                &self
-                    .payload
-                    .split_inclusive('\n')
-                    .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
-                    .to_string(),
-            );
+            let mut payload = self
+                .payload
+                .split_inclusive('\n')
+                .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
+                .to_string();
             if !self.payload.ends_with('\n') {
                 payload.push('\n');
             }
@@ -108,7 +137,8 @@ impl PatternPatch {
                     rope.insert(end, &payload);
                 }
                 InsertPosition::At => {
-                    line_delta += payload_lines - 1;
+                    line_delta += payload_lines;
+                    line_delta -= wm_lines_len;
                     rope.delete(start..end);
                     rope.insert(start, &payload);
                 }
