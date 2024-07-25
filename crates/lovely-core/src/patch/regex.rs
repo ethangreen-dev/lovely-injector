@@ -18,7 +18,7 @@ use super::InsertPosition;
 pub struct RegexPatch {
     pub target: String,
 
-    // The Regex pattern that will be used to both match and create capture groups.             
+    // The Regex pattern that will be used to both match and create capture groups.
     pub pattern: String,
 
     // The position to insert the payload relative to the match/capture group.
@@ -181,7 +181,7 @@ impl RegexPatch {
                 }
             }
 
-            // Interpolate capture groups into the payload. 
+            // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
             // implementation seems to be broken when working with ropes.
             let mut payload = String::new();
