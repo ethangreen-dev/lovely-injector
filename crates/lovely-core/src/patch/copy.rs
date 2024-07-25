@@ -35,8 +35,8 @@ impl CopyPatch {
             // Append or prepend the patch's lines onto the provided buffer.
             match self.position {
                 CopyPosition::Prepend => { 
-                    rope.insert(0,&contents);
-                    rope.insert(contents.len(), "\n");
+                    rope.insert(0, "\n");
+                    rope.insert(0, &contents);
                 },
                 CopyPosition::Append => {
                     rope.insert(rope.byte_len(), "\n");

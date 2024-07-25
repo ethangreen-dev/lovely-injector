@@ -435,7 +435,7 @@ impl PatchTable {
 
         let mut patched_lines = {
             let inner = rope.to_string();
-            inner.split('\n').map(String::from).collect_vec()
+            inner.split_inclusive('\n').map(String::from).collect_vec()
         };
 
         // Apply variable interpolation.
@@ -445,7 +445,7 @@ impl PatchTable {
             patch::vars::apply_var_interp(line, &self.vars);
         }
 
-        let patched = patched_lines.join("\n");
+        let patched = patched_lines.concat();
 
         if patch_count == 1 {
             info!("Applied 1 patch to '{target}'");

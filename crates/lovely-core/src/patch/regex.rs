@@ -97,13 +97,9 @@ impl RegexPatch {
             // Prepend each line of the payload with line_prepend.
             let new_payload = self
                 .payload
-                .lines()
-                .map(|x| if !x.is_empty() {
-                    format!("{line_prepend}{x}")
-                } else {
-                    x.to_string()
-                })
-                .join("\n");
+                .split_inclusive('\n')
+                .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
+                .to_string();
 
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that

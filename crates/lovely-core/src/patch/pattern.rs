@@ -72,9 +72,9 @@ impl PatternPatch {
                 String::new()
             };
 
-            let mut payload = self.payload.split('\n')
-                .map(|x| format!("{indent}{x}"))
-                .join("\n");
+            let mut payload = self.payload.split_inclusive('\n')
+                .format_with("", |x, f| f(&format_args!("{}{}", indent, x)))
+                .to_string();
             if !self.payload.ends_with('\n') {
                 payload.push('\n');
             }
