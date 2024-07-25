@@ -1,6 +1,3 @@
-use regex_cursor::regex_automata::util::lazy::Lazy;
-use regex_cursor::regex_automata::util::syntax::Config;
-use regex_cursor::regex_automata::Anchored;
 use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
 use regex_cursor::regex_automata::util::syntax;
@@ -69,10 +66,46 @@ impl RegexPatch {
         }
         if let Some(times) = self.times {
             if captures.len() < times {
-                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern.escape_debug(), captures.len(), times);
+                if self.pattern.lines().count() > 1 {
+                    for line in format!(
+                        "Regex '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        captures.len(),
+                        times
+                    )
+                    .lines()
+                    {
+                        log::warn!("{}", line);
+                    }
+                } else {
+                    log::warn!(
+                        "Regex '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        captures.len(),
+                        times
+                    );
+                }
             }
             if captures.len() > times {
-                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern.escape_debug(), captures.len(), times);
+                if self.pattern.lines().count() > 1 {
+                    for line in format!(
+                        "Regex '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        captures.len(),
+                        times
+                    )
+                    .lines()
+                    {
+                        log::warn!("{}", line);
+                    }
+                } else {
+                    log::warn!(
+                        "Regex '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        captures.len(),
+                        times
+                    );
+                }
                 log::warn!("Ignoring excess matches");
                 captures.truncate(times);
             }
@@ -138,7 +171,9 @@ impl RegexPatch {
             // boundary and our patch starts with a wordchar, prepend space so 
             // it doesn't unintentionally concatenate with characters to its 
             // left to create a larger identifier.
-            if self.payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}') {
+            if self.line_prepend.is_empty() && self.payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}') ||
+                self.line_prepend.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}')
+            {
                 let pre_pt = if let InsertPosition::After = self.position {
                     target_end
                 } else {

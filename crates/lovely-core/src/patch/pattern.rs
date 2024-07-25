@@ -34,14 +34,11 @@ impl PatternPatch {
         if self.target != target {
             return false;
         }
-        if self.target.is_empty() {
-            return false;
-        }
 
         let wm_lines = self
             .pattern
             .lines()
-            .map(|x| x.trim_end())
+            .map(|x| x.trim())
             .map(WildMatch::new)
             .collect::<Vec<_>>();
         if wm_lines.is_empty() {
@@ -69,9 +66,7 @@ impl PatternPatch {
                                 .take_while(|x| *x == b' ' || *x == b'\t')
                                 .collect::<Vec<_>>(),
                         )
-                        .expect(
-                            "String should consist of only \' \' and \'\\t\', which are both ASCII and therefore valid unicode",
-                        )
+                        .unwrap()
                     } else {
                         String::new()
                     },
@@ -91,20 +86,46 @@ impl PatternPatch {
         }
         if let Some(times) = self.times {
             if matches.len() < times {
-                log::warn!(
-                    "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                    self.pattern.escape_debug(),
-                    matches.len(),
-                    times
-                );
+                if wm_lines_len > 1 {
+                    for line in format!(
+                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        matches.len(),
+                        times
+                    )
+                    .lines()
+                    {
+                        log::warn!("{}", line);
+                    }
+                } else {
+                    log::warn!(
+                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        matches.len(),
+                        times
+                    );
+                }
             }
             if matches.len() > times {
-                log::warn!(
-                    "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                    self.pattern.escape_debug(),
-                    matches.len(),
-                    times
-                );
+                if wm_lines_len > 1 {
+                    for line in format!(
+                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        matches.len(),
+                        times
+                    )
+                    .lines()
+                    {
+                        log::warn!("{}", line);
+                    }
+                } else {
+                    log::warn!(
+                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        self.pattern,
+                        matches.len(),
+                        times
+                    );
+                }
                 log::warn!("Ignoring excess matches");
                 matches.truncate(times);
             }
