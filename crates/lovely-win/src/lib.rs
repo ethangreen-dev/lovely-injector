@@ -19,12 +19,12 @@ use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
 static_detour! {
-    pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8) -> u32;
+    pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8,*const u8) -> u32;
 }
 
-unsafe extern "C" fn lua_loadbuffer_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8) -> u32 {
+unsafe extern "C" fn lua_loadbufferx_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8, mode_ptr: *const u8) -> u32 {
     let rt = RUNTIME.get_unchecked();
-    rt.apply_buffer_patches(state, buf_ptr, size, name_ptr)
+    rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr)
 }
 
 #[no_mangle]
@@ -53,21 +53,21 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     }
 
     // Initialize the lovely runtime.
-    let rt = Lovely::init(&|a, b, c, d| LuaLoadbuffer_Detour.call(a, b, c, d));
+    let rt = Lovely::init(&|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d,e));
     RUNTIME.set(rt).unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
 
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.
     let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
-    let proc = GetProcAddress(handle, s!("luaL_loadbuffer")).unwrap();
-    let fn_target = std::mem::transmute::<_, unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8) -> u32>(proc);
+    let proc = GetProcAddress(handle, s!("luaL_loadbufferx")).unwrap();
+    let fn_target = std::mem::transmute::<_, unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8,*const u8) -> u32>(proc);
 
-    LuaLoadbuffer_Detour.initialize(
+    LuaLoadbufferx_Detour.initialize(
         fn_target,
-        |a, b, c, d| lua_loadbuffer_detour(a, b, c, d)
+        |a, b, c, d,e| lua_loadbufferx_detour(a, b, c, d,e)
     )
-    .unwrap()
-    .enable()
-    .unwrap();
+        .unwrap()
+        .enable()
+        .unwrap();
 
     1
 }
