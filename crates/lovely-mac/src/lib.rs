@@ -3,7 +3,7 @@ use lovely_core::sys::LuaState;
 
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
-use log::info;
+
 
 static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
