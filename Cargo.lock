@@ -406,6 +406,7 @@ version = "0.1.0"
 dependencies = [
  "ctor",
  "libc",
+ "log",
  "lovely-core",
  "once_cell",
 ]
