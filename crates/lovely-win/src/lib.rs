@@ -65,9 +65,9 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         fn_target,
         |a, b, c, d,e| lua_loadbufferx_detour(a, b, c, d,e)
     )
-        .unwrap()
-        .enable()
-        .unwrap();
+    .unwrap()
+    .enable()
+    .unwrap();
 
     1
 }

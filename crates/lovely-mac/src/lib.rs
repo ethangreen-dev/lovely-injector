@@ -30,7 +30,7 @@ unsafe extern "C" fn luaL_loadbuffer(state: *mut LuaState, buf_ptr: *const u8, s
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, null())
 }
 
-// we can do this on mac because nothing matters in this world except my pain
+
 #[no_mangle]
 #[allow(non_snake_case)]
 unsafe extern "C" fn luaL_loadbufferx(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8, mode_ptr: *const u8) -> u32 {

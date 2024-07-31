@@ -406,7 +406,6 @@ version = "0.1.0"
 dependencies = [
  "ctor",
  "libc",
- "log",
  "lovely-core",
  "once_cell",
 ]
@@ -418,7 +417,6 @@ dependencies = [
  "forward-dll",
  "itertools",
  "libc",
- "log",
  "lovely-core",
  "once_cell",
  "retour",
