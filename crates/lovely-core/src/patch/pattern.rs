@@ -40,7 +40,7 @@ impl PatternPatch {
             .lines()
             .map(|x| x.trim())
             .map(WildMatch::new)
-            .collect::<Vec<_>>();
+            .collect_vec();
         if wm_lines.is_empty() {
             log::warn!("Pattern on target '{target}' has no lines");
             return false;
@@ -48,7 +48,7 @@ impl PatternPatch {
         let wm_lines_len = wm_lines.len();
 
         let mut line_index = 0usize;
-        let rope_lines = rope.raw_lines().map(|x| x.to_string()).collect::<Vec<_>>();
+        let rope_lines = rope.raw_lines().map(|x| x.to_string()).collect_vec();
         let mut matches = Vec::new();
         while let Option::Some(rope_window) = rope_lines.get(line_index..line_index + wm_lines_len)
         {
@@ -64,7 +64,7 @@ impl PatternPatch {
                             rope_window[0]
                                 .bytes()
                                 .take_while(|x| *x == b' ' || *x == b'\t')
-                                .collect::<Vec<_>>(),
+                                .collect_vec(),
                         )
                         .unwrap()
                     } else {

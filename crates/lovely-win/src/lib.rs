@@ -2,6 +2,7 @@ use std::env;
 use std::ffi::c_void;
 use std::panic;
 
+use itertools::Itertools;
 use lovely_core::log::*;
 use lovely_core::sys::LuaState;
 use lovely_core::Lovely;
@@ -51,7 +52,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
-    let args = env::args().collect::<Vec<_>>();
+    let args = env::args().collect_vec();
     if !args.contains(&"--disable-console".to_string()) {
         let _ = AllocConsole();
     }
