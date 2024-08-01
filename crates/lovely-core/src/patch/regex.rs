@@ -188,15 +188,12 @@ impl RegexPatch {
             }
 
             // Prepend each line of the payload with line_prepend.
-            std::fmt::write(
-                &mut new_payload, 
-                format_args!("{}", 
-                    self
-                        .payload
-                        .split_inclusive('\n')
-                        .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
-                )
-            ).expect("std::fmt::write to str should not fail");
+            new_payload.push_str(&std::format!("{}", 
+                self
+                    .payload
+                    .split_inclusive('\n')
+                    .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
+            ));
 
             // If right border of insertion is a non-wordchar -> wordchar 
             // boundary and our patch ends with a wordchar, append space so 
