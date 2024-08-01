@@ -139,57 +139,14 @@ impl RegexPatch {
             let target_start = (target_group.start as isize + delta) as usize;
             let target_end = (target_group.end as isize + delta) as usize;
 
-            let mut new_payload = String::new();
-
-            fn is_possible_ident_char(x: char) -> bool {
-                x.is_ascii_alphanumeric() || ['_', '$', '{', '}'].contains(&x)
-            }
-
-            // If left border of insertion is a wordchar -> non-wordchar 
-            // boundary and our patch starts with a wordchar, prepend space so 
-            // it doesn't unintentionally concatenate with characters to its 
-            // left to create a larger identifier.
-            if self.line_prepend.is_empty() && self.payload.starts_with(is_possible_ident_char) ||
-                self.line_prepend.starts_with(is_possible_ident_char)
-            {
-                let pre_pt = if let InsertPosition::After = self.position {
-                    target_end
-                } else {
-                    target_start
-                };
-                if pre_pt > 0 {
-                    let byte_on_left = rope.byte(pre_pt - 1);
-                    if byte_on_left.is_ascii_alphanumeric() || byte_on_left == b'_' {
-                        new_payload.push(' ');
-                    }
-                }
-            }
-
-            // Prepend each line of the payload with line_prepend.
-            new_payload.push_str(&std::format!("{}", 
+            let mut new_payload = std::format!("{}", 
                 self
                     .payload
                     .split_inclusive('\n')
                     .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
-            ));
+            );
 
-            // If right border of insertion is a non-wordchar -> wordchar 
-            // boundary and our patch ends with a wordchar, append space so 
-            // it doesn't unintentionally concatenate with characters to its 
-            // right to create a larger identifier.     
-            if self.payload.ends_with(is_possible_ident_char) {
-                let post_pt = if let InsertPosition::Before = self.position {
-                    target_start
-                } else {
-                    target_end
-                };
-                if post_pt < rope.byte_len() {
-                    let byte_on_right = rope.byte(post_pt);
-                    if byte_on_right.is_ascii_alphanumeric() || byte_on_right == b'_' {
-                        new_payload.push(' ');
-                    }
-                }
-            }
+
 
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
@@ -213,6 +170,42 @@ impl RegexPatch {
                 },
                 &mut payload
             );
+
+            // If left border of insertion is a wordchar -> non-wordchar 
+            // boundary and our patch starts with a wordchar, prepend space so 
+            // it doesn't unintentionally concatenate with characters to its 
+            // left to create a larger identifier.
+            if payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
+                let pre_pt = if let InsertPosition::After = self.position {
+                    target_end
+                } else {
+                    target_start
+                };
+                if pre_pt > 0 {
+                    let byte_on_left = rope.byte(pre_pt - 1);
+                    if byte_on_left.is_ascii_alphanumeric() || byte_on_left == b'_' {
+                        payload.insert(0, ' ');
+                    }
+                }
+            }
+
+            // If right border of insertion is a non-wordchar -> wordchar 
+            // boundary and our patch ends with a wordchar, append space so 
+            // it doesn't unintentionally concatenate with characters to its 
+            // right to create a larger identifier.     
+            if payload.ends_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
+                let post_pt = if let InsertPosition::Before = self.position {
+                    target_start
+                } else {
+                    target_end
+                };
+                if post_pt < rope.byte_len() {
+                    let byte_on_right = rope.byte(post_pt);
+                    if byte_on_right.is_ascii_alphanumeric() || byte_on_right == b'_' {
+                        payload.push(' ');
+                    }
+                }
+            }
 
             match self.position {
                 InsertPosition::Before => {
