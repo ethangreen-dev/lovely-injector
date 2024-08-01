@@ -1,5 +1,6 @@
 use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
+use regex_cursor::regex_automata::util::syntax;
 use regex_cursor::regex_automata::util::interpolate;
 
 use itertools::Itertools;
@@ -7,6 +8,7 @@ use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
+
 use super::InsertPosition;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,6 +36,10 @@ pub struct RegexPatch {
 
     // Apply patch at most `times` times, warn if the number of matches differs from `times`.
     pub times: Option<usize>,
+
+    // If enabled, whitespace is ignored unless escaped
+    #[serde(default)]
+    pub verbose: bool,
 }
 
 impl RegexPatch {
@@ -43,20 +49,37 @@ impl RegexPatch {
         }
 
         let input = Input::new(rope.into_cursor());
-        let re = Regex::new(&self.pattern)
+        let re = Regex::builder()
+            .syntax(
+                 syntax::Config::new()
+                    .multi_line(true)
+                    .crlf(true)
+                    .ignore_whitespace(self.verbose)
+            )
+            .build(&self.pattern)
             .unwrap_or_else(|e| panic!("Failed to compile Regex '{}': {e:?}", self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::warn!("Regex '{}' on target '{target}' resulted in no matches", self.pattern);
+            log::warn!("Regex '{}' on target '{target}' resulted in no matches", self.pattern.escape_debug());
             return false;
         }
         if let Some(times) = self.times {
+            fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize) {
+                let warn_msg: String = if pattern.lines().count() > 1 {
+                    format!("Regex '''\n{pattern}''' on target '{target}' resulted in {found_matches} matches, wanted {wanted_matches}" )
+                } else {
+                    format!("Regex '{pattern}' on target '{target}' resulted in {found_matches} matches, wanted {wanted_matches}")
+                };
+                for line in warn_msg.lines() {
+                    log::warn!("{}", line)
+                }
+            }
             if captures.len() < times {
-                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+                warn_regex_mismatch(&self.pattern, target, captures.len(), times);
             }
             if captures.len() > times {
-                log::warn!("Regex '{}' on target '{target}' resulted in {} matches, wanted {}", self.pattern, captures.len(), times);
+                warn_regex_mismatch(&self.pattern, target, captures.len(), times);
                 log::warn!("Ignoring excess matches");
                 captures.truncate(times);
             }
@@ -94,39 +117,6 @@ impl RegexPatch {
                 &mut line_prepend
             );
 
-            // Prepend each line of the payload with line_prepend.
-            let new_payload = self
-                .payload
-                .lines()
-                .map(|x| if !x.is_empty() {
-                    format!("{line_prepend}{x}")
-                } else {
-                    x.to_string()
-                })
-                .join("\n");
-
-            // Interpolate capture groups into the payload.
-            // We must use this method instead of Captures::interpolate_string because that
-            // implementation seems to be broken when working with ropes.
-            let mut payload = String::new();
-            interpolate::string(
-                &new_payload,
-                |index, dest| {
-                    let span = groups.get_group(index).unwrap();
-                    let start = (span.start as isize + delta) as usize;
-                    let end = (span.end as isize + delta) as usize;
-
-                    let rope_slice = rope.byte_slice(start..end);
-
-                    dest.push_str(&rope_slice.to_string());
-                },
-                |name| {
-                    let pid = groups.pattern().unwrap();
-                    groups.group_info().to_index(pid, name)
-                },
-                &mut payload
-            );
-
             // Cleanup and convert the specified root capture to a span.
             let target_group = {
                 let group_name = self
@@ -148,6 +138,74 @@ impl RegexPatch {
 
             let target_start = (target_group.start as isize + delta) as usize;
             let target_end = (target_group.end as isize + delta) as usize;
+
+            let mut new_payload = std::format!("{}", 
+                self
+                    .payload
+                    .split_inclusive('\n')
+                    .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
+            );
+
+
+
+            // Interpolate capture groups into the payload.
+            // We must use this method instead of Captures::interpolate_string because that
+            // implementation seems to be broken when working with ropes.
+            let mut payload = String::new();
+
+            interpolate::string(
+                &new_payload,
+                |index, dest| {
+                    let span = groups.get_group(index).unwrap();
+                    let start = (span.start as isize + delta) as usize;
+                    let end = (span.end as isize + delta) as usize;
+
+                    let rope_slice = rope.byte_slice(start..end);
+
+                    dest.push_str(&rope_slice.to_string());
+                },
+                |name| {
+                    let pid = groups.pattern().unwrap();
+                    groups.group_info().to_index(pid, name)
+                },
+                &mut payload
+            );
+
+            // If left border of insertion is a wordchar -> non-wordchar 
+            // boundary and our patch starts with a wordchar, prepend space so 
+            // it doesn't unintentionally concatenate with characters to its 
+            // left to create a larger identifier.
+            if payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
+                let pre_pt = if let InsertPosition::After = self.position {
+                    target_end
+                } else {
+                    target_start
+                };
+                if pre_pt > 0 {
+                    let byte_on_left = rope.byte(pre_pt - 1);
+                    if byte_on_left.is_ascii_alphanumeric() || byte_on_left == b'_' {
+                        payload.insert(0, ' ');
+                    }
+                }
+            }
+
+            // If right border of insertion is a non-wordchar -> wordchar 
+            // boundary and our patch ends with a wordchar, append space so 
+            // it doesn't unintentionally concatenate with characters to its 
+            // right to create a larger identifier.     
+            if payload.ends_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
+                let post_pt = if let InsertPosition::Before = self.position {
+                    target_start
+                } else {
+                    target_end
+                };
+                if post_pt < rope.byte_len() {
+                    let byte_on_right = rope.byte(post_pt);
+                    if byte_on_right.is_ascii_alphanumeric() || byte_on_right == b'_' {
+                        payload.push(' ');
+                    }
+                }
+            }
 
             match self.position {
                 InsertPosition::Before => {
