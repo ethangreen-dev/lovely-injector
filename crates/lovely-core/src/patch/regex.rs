@@ -65,47 +65,21 @@ impl RegexPatch {
             return false;
         }
         if let Some(times) = self.times {
-            if captures.len() < times {
-                if self.pattern.lines().count() > 1 {
-                    for line in format!(
-                        "Regex '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        captures.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
+            fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize) {
+                let warn_msg: String = if pattern.lines().count() > 1 {
+                    format!("Regex '''\n{pattern}''' on target '{target}' resulted in {found_matches} matches, wanted {wanted_matches}" )
                 } else {
-                    log::warn!(
-                        "Regex '{}' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        captures.len(),
-                        times
-                    );
+                    format!("Regex '{pattern}' on target '{target}' resulted in {found_matches} matches, wanted {wanted_matches}")
+                };
+                for line in warn_msg.lines() {
+                    log::warn!("{}", line)
                 }
             }
+            if captures.len() < times {
+                warn_regex_mismatch(&self.pattern, target, captures.len(), times);
+            }
             if captures.len() > times {
-                if self.pattern.lines().count() > 1 {
-                    for line in format!(
-                        "Regex '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        captures.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
-                } else {
-                    log::warn!(
-                        "Regex '{}' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        captures.len(),
-                        times
-                    );
-                }
+                warn_regex_mismatch(&self.pattern, target, captures.len(), times);
                 log::warn!("Ignoring excess matches");
                 captures.truncate(times);
             }
@@ -167,12 +141,16 @@ impl RegexPatch {
 
             let mut new_payload = String::new();
 
+            fn is_possible_ident_char(x: char) -> bool {
+                x.is_ascii_alphanumeric() || ['_', '$', '{', '}'].contains(&x)
+            }
+
             // If left border of insertion is a wordchar -> non-wordchar 
             // boundary and our patch starts with a wordchar, prepend space so 
             // it doesn't unintentionally concatenate with characters to its 
             // left to create a larger identifier.
-            if self.line_prepend.is_empty() && self.payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}') ||
-                self.line_prepend.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}')
+            if self.line_prepend.is_empty() && self.payload.starts_with(is_possible_ident_char) ||
+                self.line_prepend.starts_with(is_possible_ident_char)
             {
                 let pre_pt = if let InsertPosition::After = self.position {
                     target_end
@@ -199,7 +177,7 @@ impl RegexPatch {
             // boundary and our patch ends with a wordchar, append space so 
             // it doesn't unintentionally concatenate with characters to its 
             // right to create a larger identifier.     
-            if self.payload.ends_with(|x: char| x.is_ascii_alphanumeric() || x == '_' || x == '$' || x == '{' || x == '}') {
+            if self.payload.ends_with(is_possible_ident_char) {
                 let post_pt = if let InsertPosition::Before = self.position {
                     target_start
                 } else {

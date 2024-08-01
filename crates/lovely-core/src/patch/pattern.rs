@@ -57,20 +57,18 @@ impl PatternPatch {
                 .zip(wm_lines.iter())
                 .all(|(source, target)| target.matches(source.trim()))
             {
-                matches.push((
-                    line_index,
-                    if self.match_indent {
-                        String::from_utf8(
-                            rope_window[0]
-                                .bytes()
-                                .take_while(|x| *x == b' ' || *x == b'\t')
-                                .collect_vec(),
-                        )
-                        .unwrap()
-                    } else {
-                        String::new()
-                    },
-                ));
+                if self.match_indent {
+                    let leading_indent = String::from_utf8(
+                        rope_window[0]
+                            .bytes()
+                            .take_while(|x| *x == b' ' || *x == b'\t')
+                            .collect_vec(),
+                    )
+                    .unwrap();
+                    matches.push((line_index, leading_indent));
+                } else {
+                    matches.push((line_index, String::new()));
+                }
                 line_index += wm_lines.len();
             } else {
                 line_index += 1;
