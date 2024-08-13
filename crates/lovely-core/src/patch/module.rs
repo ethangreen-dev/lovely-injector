@@ -47,44 +47,22 @@ impl ModulePatch {
         let field_index = sys::lua_gettop(state);
 
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        lual_loadbuffer(
+        let return_code = lual_loadbuffer(
             state,
             buf_cstr.into_raw() as _,
             buf_len as _,
             name_cstr.into_raw() as _,
             ptr::null(),
         );
-
-        let return_code = sys::lua_pcall(state, 0, -1, 0);
-
         if return_code == 0 {
-            // Call succeeded, insert results onto the package.preload global table.
+            // Insert results onto the package.preload global table.
             let module_cstr = CString::new(self.name.clone()).unwrap();
-
             sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
-            sys::lua_settop(state, stack_top);
-
-            true
         } else {
-            // We might quietly convert a number to a string, but this is fine,
-            // as we're just printing it as a diagnostic, and popping it off
-            // immediately afterwards
-            let mut error_cstr_len = 0;
-            let error_cstr = sys::lua_tolstring(state, field_index, &mut error_cstr_len);
-            if !error_cstr.is_null() {
-                log::error!(
-                    "Loading module {} failed with error {}",
-                    self.name,
-                    String::from_utf8_lossy(slice::from_raw_parts(
-                        error_cstr as *const u8,
-                        error_cstr_len.try_into().unwrap()
-                    ))
-                );
-            } else {
-                log::error!("Loading module {} failed with unknown error", self.name);
-            }
-            sys::lua_settop(state, stack_top);
-            false
+            log::error!("Failed to load module {}", self.name);
         }
+        sys::lua_settop(state, stack_top);
+
+        return_code == 0
     }
 }
