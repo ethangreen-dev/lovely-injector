@@ -4,24 +4,24 @@ use core::slice;
 use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
+use std::path::{Path, PathBuf};
 use std::sync::Once;
 use std::time::Instant;
 use std::{env, fs};
-use std::path::{Path, PathBuf};
 
 use log::*;
 
-use itertools::Itertools;
-use getargs::{Arg, Options};
-use patch::{Patch, PatchFile, Priority};
 use crop::Rope;
+use getargs::{Arg, Options};
+use itertools::Itertools;
+use patch::{Patch, PatchFile, Priority};
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
 pub mod chunk_vec_cursor;
-pub mod sys;
 pub mod log;
 pub mod patch;
+pub mod sys;
 
 type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
@@ -40,11 +40,13 @@ impl Lovely {
 
         let args = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
-        let cur_exe = env::current_exe()
-            .expect("Failed to get the path of the current executable.");
+        let cur_exe =
+            env::current_exe().expect("Failed to get the path of the current executable.");
         let game_name = if env::consts::OS == "macos" {
             cur_exe
-                .parent().and_then(Path::parent).and_then(Path::parent)
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
                 .expect("Couldn't find parent .app of current executable path")
                 .file_name()
                 .expect("Failed to get file_name of parent directory of current executable")
@@ -59,10 +61,7 @@ impl Lovely {
                 .to_string_lossy()
                 .replace(".", "_")
         };
-        let mut mod_dir = dirs::config_dir()
-            .unwrap()
-            .join(game_name)
-            .join("Mods");
+        let mut mod_dir = dirs::config_dir().unwrap().join(game_name).join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
 
@@ -75,7 +74,9 @@ impl Lovely {
 
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
             match opt {
-                Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir),
+                Arg::Long("mod-dir") => {
+                    mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir)
+                }
                 Arg::Long("vanilla") => is_vanilla = true,
                 _ => (),
             }
@@ -115,17 +116,20 @@ impl Lovely {
         }
 
         info!("Using mod directory at {mod_dir:?}");
-        let patch_table = PatchTable::load(&mod_dir)
-            .with_loadbuffer(loadbuffer);
+        let patch_table = PatchTable::load(&mod_dir).with_loadbuffer(loadbuffer);
 
         let dump_dir = mod_dir.join("lovely").join("dump");
         if dump_dir.is_dir() {
             info!("Cleaning up dumps directory at {dump_dir:?}");
-            fs::remove_dir_all(&dump_dir)
-                .unwrap_or_else(|e| panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}"));
+            fs::remove_dir_all(&dump_dir).unwrap_or_else(|e| {
+                panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}")
+            });
         }
 
-        info!("Initialization complete in {}ms", start.elapsed().as_millis());
+        info!(
+            "Initialization complete in {}ms",
+            start.elapsed().as_millis()
+        );
 
         Lovely {
             mod_dir,
@@ -142,7 +146,14 @@ impl Lovely {
     /// This function is unsafe because
     /// - It interacts and manipulates memory directly through native pointers
     /// - It interacts, calls, and mutates native lua state through native pointers
-    pub unsafe fn apply_buffer_patches(&self, state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8, mode_ptr: *const u8) -> u32 {
+    pub unsafe fn apply_buffer_patches(
+        &self,
+        state: *mut LuaState,
+        buf_ptr: *const u8,
+        size: isize,
+        name_ptr: *const u8,
+        mode_ptr: *const u8
+    ) -> u32 {
         // Install native function overrides.
         self.rt_init.call_once(|| {
             let closure = sys::override_print as *const c_void;
@@ -153,8 +164,9 @@ impl Lovely {
             self.patch_table.inject_metadata(state);
         });
 
-        let name = CStr::from_ptr(name_ptr as _).to_str()
-            .unwrap_or_else(|e| panic!("The byte sequence at {name_ptr:x?} is not a valid UTF-8 string: {e:?}"));
+        let name = CStr::from_ptr(name_ptr as _).to_str().unwrap_or_else(|e| {
+            panic!("The byte sequence at {name_ptr:x?} is not a valid UTF-8 string: {e:?}")
+        });
 
         // Stop here if no valid patch exists for this target.
         if !self.patch_table.needs_patching(name) {
@@ -162,19 +174,21 @@ impl Lovely {
         }
 
         // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
-        let last_byte = *buf_ptr.add((size - 1) as usize);
+        let last_byte = *buf_ptr.offset(size - 1);
         let actual_size = if last_byte == 0 { size - 1 } else { size };
 
         // Convert the buffer from cstr ptr, to byte slice, to utf8 str.
         let buf = slice::from_raw_parts(buf_ptr, actual_size as _);
         let buf_str = CString::new(buf)
             .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains a non-terminating null char: {e:?}"));
-        let buf_str = buf_str.to_str()
-            .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}"));
+        let buf_str = buf_str.to_str().unwrap_or_else(|e| {
+            panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}")
+        });
 
         let patched = self.patch_table.apply_patches(name, buf_str, state);
 
-        let patch_dump = self.mod_dir
+        let patch_dump = self
+            .mod_dir
             .join("lovely")
             .join("dump")
             .join(name.replace('@', ""));
@@ -215,7 +229,9 @@ impl PatchTable {
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
         let mod_dirs = fs::read_dir(mod_dir)
-            .unwrap_or_else(|e| panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}"))
+            .unwrap_or_else(|e| {
+                panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}")
+            })
             .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
             .map(|x| x.path())
@@ -243,7 +259,9 @@ impl PatchTable {
 
                 if lovely_dir.is_dir() {
                     let mut subfiles = fs::read_dir(&lovely_dir)
-                        .unwrap_or_else(|_| panic!("Failed to read from lovely directory at '{lovely_dir:?}'."))
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to read from lovely directory at '{lovely_dir:?}'.")
+                        })
                         .filter_map(|x| x.ok())
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
@@ -272,8 +290,9 @@ impl PatchTable {
             };
 
             let mut patch_file: PatchFile = {
-                let str = fs::read_to_string(&patch_file)
-                    .unwrap_or_else(|e| panic!("Failed to read patch file at {patch_file:?}:\n{e:?}"));
+                let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
+                    panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
+                });
 
                 // Handle invalid fields in a non-explosive way.
                 let ignored_key_callback = |key: serde_ignored::Path| {
@@ -363,7 +382,12 @@ impl PatchTable {
     /// Apply one or more patches onto the target's buffer.
     /// # Safety
     /// Unsafe due to internal unchecked usages of raw lua state.
-    pub unsafe fn apply_patches(&self, target: &str, buffer: &str, lua_state: *mut LuaState) -> String {
+    pub unsafe fn apply_patches(
+        &self,
+        target: &str,
+        buffer: &str,
+        lua_state: *mut LuaState,
+    ) -> String {
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
@@ -380,7 +404,7 @@ impl PatchTable {
             .iter()
             .filter_map(|(x, prio)| match x {
                 Patch::Copy(patch) => Some((patch, prio)),
-                _ => None
+                _ => None,
             })
             .sorted_by_key(|(_, &prio)| prio)
             .map(|(x, _)| x);
@@ -389,7 +413,7 @@ impl PatchTable {
             .iter()
             .filter_map(|(x, prio)| match x {
                 Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio)),
-                _ => None
+                _ => None,
             })
             .sorted_by_key(|(_, &prio)| prio)
             .map(|(x, _)| x);
@@ -401,9 +425,7 @@ impl PatchTable {
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.unwrap();
         for patch in module_patches {
-            let result = unsafe {
-                patch.apply(target, lua_state, &loadbuffer)
-            };
+            let result = unsafe { patch.apply(target, lua_state, &loadbuffer) };
 
             if result {
                 patch_count += 1;
@@ -423,19 +445,19 @@ impl PatchTable {
                     if patch.apply(target, &mut rope) {
                         patch_count += 1;
                     }
-                },
+                }
                 Patch::Regex(patch) => {
                     if patch.apply(target, &mut rope) {
                         patch_count += 1;
                     }
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
         }
 
         let mut patched_lines = {
             let inner = rope.to_string();
-            inner.split('\n').map(String::from).collect_vec()
+            inner.split_inclusive('\n').map(String::from).collect_vec()
         };
 
         // Apply variable interpolation.
@@ -445,7 +467,7 @@ impl PatchTable {
             patch::vars::apply_var_interp(line, &self.vars);
         }
 
-        let patched = patched_lines.join("\n");
+        let patched = patched_lines.concat();
 
         if patch_count == 1 {
             info!("Applied 1 patch to '{target}'");
@@ -458,8 +480,6 @@ impl PatchTable {
         hasher.update(patched.as_bytes());
         let hash = format!("{:x}", hasher.finalize());
 
-        format!(
-            "LOVELY_INTEGRITY = '{hash}'\n\n{patched}"
-        )
+        format!("LOVELY_INTEGRITY = '{hash}'\n\n{patched}")
     }
 }

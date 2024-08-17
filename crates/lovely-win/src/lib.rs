@@ -1,12 +1,12 @@
 use std::env;
-use std::panic;
 use std::ffi::c_void;
-
-use lovely_core::log::*;
-use lovely_core::Lovely;
-use lovely_core::sys::LuaState;
+use std::panic;
 
 use itertools::Itertools;
+use lovely_core::log::*;
+use lovely_core::sys::LuaState;
+use lovely_core::Lovely;
+
 use once_cell::sync::OnceCell;
 use retour::static_detour;
 use widestring::U16CString;
@@ -22,7 +22,13 @@ static_detour! {
     pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8,*const u8) -> u32;
 }
 
-unsafe extern "C" fn lua_loadbufferx_detour(state: *mut LuaState, buf_ptr: *const u8, size: isize, name_ptr: *const u8, mode_ptr: *const u8) -> u32 {
+unsafe extern "C" fn lua_loadbufferx_detour(
+    state: *mut LuaState,
+    buf_ptr: *const u8,
+    size: isize,
+    name_ptr: *const u8,
+    mode_ptr: *const u8
+) -> u32 {
     let rt = RUNTIME.get_unchecked();
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr)
 }
@@ -54,7 +60,9 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     // Initialize the lovely runtime.
     let rt = Lovely::init(&|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d,e));
-    RUNTIME.set(rt).unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
+    RUNTIME
+        .set(rt)
+        .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
 
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.
     let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
