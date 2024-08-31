@@ -8,6 +8,10 @@ pub struct ModulePatch {
     pub source: PathBuf,
     pub before: String,
     pub name: String,
+
+    // If enabled, evaluate the module immediately upon loading it
+    #[serde(default)]
+    pub load_now: bool,
 }
 
 impl ModulePatch {
@@ -54,15 +58,30 @@ impl ModulePatch {
             name_cstr.into_raw() as _,
             ptr::null(),
         );
-        if return_code == 0 {
-            // Insert results onto the package.preload global table.
-            let module_cstr = CString::new(self.name.clone()).unwrap();
-            sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
-        } else {
-            log::error!("Failed to load module {}", self.name);
-        }
-        sys::lua_settop(state, stack_top);
 
-        return_code == 0
+        if return_code != 0 {
+            log::error!("Failed to load module {}", self.name);
+            sys::lua_settop(state, stack_top);
+            return false;
+        }
+
+        if self.load_now {
+            // Evaluate the results of the buffer now
+            let return_code = sys::lua_pcall(state, 0, 1, 0);
+            if return_code != 0 {
+                log::error!("Evaluation of module failed for {}", self.name);
+                sys::lua_settop(state, stack_top);
+                return false;
+            }
+            // Wrap this in the identity closure function
+            sys::lua_pushcclosure(state, sys::lua_identity_closure as *const c_void, 1);
+        }
+
+        // Insert results onto the package.preload global table.
+        let module_cstr = CString::new(self.name.clone()).unwrap();
+        sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
+        // Always ensure that the lua stack is in good order
+        sys::lua_settop(state, stack_top);
+        true
     }
 }

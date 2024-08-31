@@ -80,10 +80,10 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
     let p_name = format!("@{name}");
     let p_name_cstr = CString::new(p_name).unwrap();
 
-    // Push the global package.loaded table onto the top of the stack, saving its index.
+    // Push the global package.preload table onto the top of the stack, saving its index.
     let stack_top = lua_gettop(state);
     lua_getfield(state, LUA_GLOBALSINDEX, b"package\0".as_ptr() as _);
-    lua_getfield(state, -1, b"loaded\0".as_ptr() as _);
+    lua_getfield(state, -1, b"preload\0".as_ptr() as _);
 
     // This is the index of the `package.loaded` table.
     let field_index = lua_gettop(state);
@@ -97,12 +97,15 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
         ptr::null()
     );
 
-    lua_pcall(state, 0, -1, 0);
+    let lua_pcall_return = lua_pcall(state, 0, -1, 0);
+    if lua_pcall_return == 0 {
+        sys::lua_pushcclosure(state, lua_identity_closure as *const c_void, 1);
+        // Insert wrapped pcall results onto the package.preload global table.
+        let module_cstr = CString::new(name).unwrap();
 
-    // Insert pcall results onto the package.loaded global table.
-    let module_cstr = CString::new(name).unwrap();
+        lua_setfield(state, field_index, module_cstr.into_raw() as _);
+    }
 
-    lua_setfield(state, field_index, module_cstr.into_raw() as _);
     lua_settop(state, stack_top);
 }
 
@@ -135,4 +138,15 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     info!("{out}");
 
     0
+}
+
+/// A function, which as a Lua closure, returns the first upvalue. This lets it
+/// be used to wrap lua values into a closure which returns that value.
+/// # Safety
+/// Makes some FFI calls, mutates internal C lua state.
+pub unsafe extern "C" fn lua_identity_closure(state: *mut LuaState) -> isize {
+    // LUA_GLOBALSINDEX - 1 is where the first upvalue is located
+    lua_pushvalue(state, LUA_GLOBALSINDEX - 1);
+    // We just return that value
+    return 1;
 }
