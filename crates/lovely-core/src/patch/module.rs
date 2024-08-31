@@ -1,6 +1,11 @@
-use std::{ffi::CString, fs, path::PathBuf, ptr, slice};
+use std::{
+    ffi::{c_void, CString},
+    fs,
+    path::PathBuf,
+    ptr, slice,
+};
 
-use crate::sys::{self, LuaState};
+use crate::sys::{self, lua_identity_closure, LuaState};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -74,7 +79,7 @@ impl ModulePatch {
                 return false;
             }
             // Wrap this in the identity closure function
-            sys::lua_pushcclosure(state, sys::lua_identity_closure as *const c_void, 1);
+            sys::lua_pushcclosure(state, lua_identity_closure as *const c_void, 1);
         }
 
         // Insert results onto the package.preload global table.

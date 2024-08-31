@@ -99,7 +99,7 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
 
     let lua_pcall_return = lua_pcall(state, 0, -1, 0);
     if lua_pcall_return == 0 {
-        sys::lua_pushcclosure(state, lua_identity_closure as *const c_void, 1);
+        lua_pushcclosure(state, lua_identity_closure as *const c_void, 1);
         // Insert wrapped pcall results onto the package.preload global table.
         let module_cstr = CString::new(name).unwrap();
 

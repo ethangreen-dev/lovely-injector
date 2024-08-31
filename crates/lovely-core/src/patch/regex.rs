@@ -139,14 +139,12 @@ impl RegexPatch {
             let target_start = (target_group.start as isize + delta) as usize;
             let target_end = (target_group.end as isize + delta) as usize;
 
-            let mut new_payload = std::format!("{}", 
+            let new_payload = std::format!("{}", 
                 self
                     .payload
                     .split_inclusive('\n')
                     .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
             );
-
-
 
             // Interpolate capture groups into the payload.
             // We must use this method instead of Captures::interpolate_string because that
