@@ -226,7 +226,8 @@ impl PatchTable {
     /// within each subdirectory that matches either:
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
-    /// if MOD_DIR/.lovelynested exists, treat each subfolder as a separate MOD_DIR
+    /// - */MOD_DIR/lovely.toml
+    /// - */MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
         let mod_dirs = fs::read_dir(mod_dir)
             .unwrap_or_else(|e| {
@@ -238,33 +239,21 @@ impl PatchTable {
 
         let mod_dirs_unnested = mod_dirs
             .flat_map(|dir| {
-                let nested_file = dir.join(".lovelynested");
-                let dirname = dir
-                    .file_name()
-                    .unwrap_or_else(|| panic!("Failed to read directory name of {dir:?}"))
-                    .to_string_lossy();
+                let mut all_dirs = Vec::new();
 
-                if !nested_file.is_file() {
-                    let mut single_dir = Vec::new();
-                    single_dir.push(dir);
+                let mut subfolders = fs::read_dir(&dir)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to read subfolders from lovely directory at '{dir:?}'.")
+                        })
+                        .filter_map(|x| x.ok())
+                        .map(|x| x.path())
+                        .filter(|x| x.is_dir())
+                        .collect_vec();
 
-                    single_dir
-                } else {
-                    info!("Found .lovelynested in '{dirname}', we will check nested dirs for patches.");
-                    let mut nested_dirs = Vec::new();
+                all_dirs.append(&mut subfolders);
+                all_dirs.push(dir);
 
-                    let mut subfolders = fs::read_dir(&dir)
-                            .unwrap_or_else(|_| {
-                                panic!("Failed to read subfolders from lovely directory at '{dir:?}'.")
-                            })
-                            .filter_map(|x| x.ok())
-                            .map(|x| x.path())
-                            .filter(|x| x.is_dir())
-                            .collect_vec();
-                        nested_dirs.append(&mut subfolders);
-
-                    nested_dirs
-                }
+                all_dirs
             }).filter(|x| {
                 let ignore_file = x.join(".lovelyignore");
                 let dirname = x
@@ -302,6 +291,7 @@ impl PatchTable {
 
                 toml_files
             })
+            .unique()
             .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
