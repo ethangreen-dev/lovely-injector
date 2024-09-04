@@ -23,7 +23,7 @@ pub mod log;
 pub mod patch;
 pub mod sys;
 
-type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8) -> u32 + Send + Sync + 'static;
+type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 pub struct Lovely {
     pub mod_dir: PathBuf,
@@ -152,6 +152,7 @@ impl Lovely {
         buf_ptr: *const u8,
         size: isize,
         name_ptr: *const u8,
+        mode_ptr: *const u8
     ) -> u32 {
         // Install native function overrides.
         self.rt_init.call_once(|| {
@@ -169,7 +170,7 @@ impl Lovely {
 
         // Stop here if no valid patch exists for this target.
         if !self.patch_table.needs_patching(name) {
-            return (self.loadbuffer)(state, buf_ptr, size, name_ptr);
+            return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
         // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
@@ -206,7 +207,7 @@ impl Lovely {
         let raw_size = raw.as_bytes().len();
         let raw_ptr = raw.into_raw();
 
-        (self.loadbuffer)(state, raw_ptr as _, raw_size as _, name_ptr)
+        (self.loadbuffer)(state, raw_ptr as _, raw_size as _, name_ptr, mode_ptr)
     }
 }
 

@@ -1,5 +1,4 @@
-use std::{ffi::CString, fs, path::PathBuf};
-
+use std::{ffi::CString, fs, path::PathBuf, ptr};
 use crate::sys::{self, LuaState};
 use serde::{Serialize, Deserialize};
 
@@ -17,7 +16,7 @@ impl ModulePatch {
     /// # Safety
     /// This function is unsafe as it interfaces directly with a series of dynamically loaded
     /// native lua functions.
-    pub unsafe fn apply<F: Fn(*mut LuaState, *const u8, isize, *const u8) -> u32>(
+    pub unsafe fn apply<F: Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32>(
         &self, 
         file_name: &str, 
         state: *mut LuaState, 
@@ -48,7 +47,7 @@ impl ModulePatch {
         let field_index = sys::lua_gettop(state);
 
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        lual_loadbuffer(state, buf_cstr.into_raw() as _, buf_len as _, name_cstr.into_raw() as _);
+        lual_loadbuffer(state, buf_cstr.into_raw() as _, buf_len as _, name_cstr.into_raw() as _, ptr::null());
 
         sys::lua_pcall(state, 0, -1, 0);
 
