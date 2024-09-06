@@ -1,4 +1,7 @@
-use std::{ffi::{c_void, CString}, ptr, slice};
+use std::{
+    ffi::{c_void, CString},
+    ptr, slice,
+};
 
 use libc::FILE;
 use libloading::{Library, Symbol};
@@ -72,7 +75,7 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
     state: *mut LuaState,
     name: &str,
     buffer: &str,
-    lual_loadbuffer: &F
+    lual_loadbufferx: &F,
 ) {
     let buf_cstr = CString::new(buffer).unwrap();
     let buf_len = buf_cstr.as_bytes().len();
@@ -89,12 +92,12 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
     let field_index = lua_gettop(state);
 
     // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-    lual_loadbuffer(
+    lual_loadbufferx(
         state,
         buf_cstr.into_raw() as _,
         buf_len as _,
         p_name_cstr.into_raw() as _,
-        ptr::null()
+        ptr::null(),
     );
 
     let lua_pcall_return = lua_pcall(state, 0, -1, 0);

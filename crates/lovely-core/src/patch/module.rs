@@ -20,7 +20,7 @@ pub struct ModulePatch {
 }
 
 impl ModulePatch {
-    /// Apply a module patch by loading the input file(s) into memory, calling lual_loadbuffer
+    /// Apply a module patch by loading the input file(s) into memory, calling lual_loadbufferx
     /// on them, and then injecting them into the global `package.preload` table.
     ///
     /// # Safety
@@ -30,7 +30,7 @@ impl ModulePatch {
         &self,
         file_name: &str,
         state: *mut LuaState,
-        lual_loadbuffer: &F,
+        lual_loadbufferx: &F,
     ) -> bool {
         // Stop if we're not at the correct insertion point.
         if self.before != file_name {
@@ -56,7 +56,7 @@ impl ModulePatch {
         let field_index = sys::lua_gettop(state);
 
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        let return_code = lual_loadbuffer(
+        let return_code = lual_loadbufferx(
             state,
             buf_cstr.into_raw() as _,
             buf_len as _,
