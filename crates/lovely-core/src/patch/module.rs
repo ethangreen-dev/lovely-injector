@@ -17,6 +17,9 @@ pub struct ModulePatch {
     // If enabled, evaluate the module immediately upon loading it
     #[serde(default)]
     pub load_now: bool,
+    // Used for the display name of the source. Is the relative path to the source.
+    #[serde(skip)]
+    pub display_source: String,
 }
 
 impl ModulePatch {
@@ -44,7 +47,7 @@ impl ModulePatch {
         let buf_cstr = CString::new(source.as_str()).unwrap();
         let buf_len = buf_cstr.as_bytes().len();
 
-        let name = format!("@{file_name}");
+        let name = format!("=[lovely {} \"{}\"]", &self.name, &self.display_source);
         let name_cstr = CString::new(name).unwrap();
 
         // Push the global package.preload table onto the top of the stack, saving its index.
