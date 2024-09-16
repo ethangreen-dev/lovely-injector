@@ -17,6 +17,7 @@ pub struct ModulePatch {
     // If enabled, evaluate the module immediately upon loading it
     #[serde(default)]
     pub load_now: bool,
+    // Used for the display name of the source. Is the relative path to the source.
     #[serde(skip)]
     pub display_source: String,
 }
