@@ -314,6 +314,7 @@ impl PatchTable {
                         targets.insert(x.target.clone());
                     }
                     Patch::Module(ref mut x) => {
+                        x.display_source = x.source.clone().into_os_string().into_string().unwrap_or_default();
                         x.source = mod_dir.join(&x.source);
                         targets.insert(x.before.clone());
                     }
