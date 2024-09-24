@@ -164,9 +164,15 @@ impl Lovely {
             self.patch_table.inject_metadata(state);
         });
 
-        let name = CStr::from_ptr(name_ptr as _).to_str().unwrap_or_else(|e| {
-            panic!("The byte sequence at {name_ptr:x?} is not a valid UTF-8 string: {e:?}")
-        });
+        let name = match CStr::from_ptr(name_ptr as _).to_str() {
+            Ok(x) => x,
+            Err(e) => {
+                // There's practically 0 use-case for patching a target with a bad chunk name,
+                // so pump a warning to the console and recall.
+                warn!("The chunk name at {name_ptr:?} contains invalid UTF-8, skipping: {e}");
+                return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
+            }
+        };
 
         // Stop here if no valid patch exists for this target.
         if !self.patch_table.needs_patching(name) {
