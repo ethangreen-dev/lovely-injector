@@ -1,8 +1,8 @@
 use std::{
-    ffi::{c_void, CString},
-    ptr, slice,
+    collections::VecDeque, ffi::{c_void, CString}, ptr, slice
 };
 
+use itertools::Itertools;
 use libc::FILE;
 use libloading::{Library, Symbol};
 use log::info;
@@ -117,28 +117,29 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
 /// Native lua API access. It's unsafe, it's unchecked, it will probably eat your firstborn.
 pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     let argc = lua_gettop(state);
-    let mut out = String::new();
+    let mut out = VecDeque::new();
 
-    for i in 0..argc {
+    for _ in 0..argc {
         let mut str_len = 0_isize;
         let arg_str = lua_tolstring(state, -1, &mut str_len);
-        if arg_str.is_null() {
-            out.push_str("[G] nil");
-            continue;
-        }
 
-        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
-        let arg_str = String::from_utf8_lossy(str_buf);
+        let arg_str = match arg_str.is_null() {
+            true => String::from("nil"),
+            false => {
+                let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
+                String::from_utf8_lossy(str_buf).to_string()
+            }
+        };
 
-        if i > 1 {
-            out.push('\t');
-        }
-
-        out.push_str(&format!("[G] {arg_str}"));
+        out.push_front(arg_str);
         lua_settop(state, -(1) - 1);
     }
 
-    info!("{out}");
+    let msg = out
+        .into_iter()
+        .join("\t");
+
+    info!("[G] {msg}");
 
     0
 }
