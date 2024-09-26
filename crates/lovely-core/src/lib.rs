@@ -233,6 +233,8 @@ impl PatchTable {
     /// within each subdirectory that matches either:
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
+    /// - */MOD_DIR/lovely.toml
+    /// - */MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
         let mod_dirs = fs::read_dir(mod_dir)
             .unwrap_or_else(|e| {
@@ -240,8 +242,26 @@ impl PatchTable {
             })
             .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
-            .map(|x| x.path())
-            .filter(|x| {
+            .map(|x| x.path());
+
+        let mod_dirs_unnested = mod_dirs
+            .flat_map(|dir| {
+                let mut all_dirs = Vec::new();
+
+                let mut subfolders = fs::read_dir(&dir)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to read subfolders from lovely directory at '{dir:?}'.")
+                        })
+                        .filter_map(|x| x.ok())
+                        .map(|x| x.path())
+                        .filter(|x| x.is_dir())
+                        .collect_vec();
+
+                all_dirs.append(&mut subfolders);
+                all_dirs.push(dir);
+
+                all_dirs
+            }).filter(|x| {
                 let ignore_file = x.join(".lovelyignore");
                 let dirname = x
                     .file_name()
@@ -251,9 +271,9 @@ impl PatchTable {
                     info!("Found .lovelyignore in '{dirname}', skipping it.");
                 }
                 !ignore_file.is_file()
-            });
+            });    
 
-        let patch_files = mod_dirs
+        let patch_files = mod_dirs_unnested
             .flat_map(|dir| {
                 let lovely_toml = dir.join("lovely.toml");
                 let lovely_dir = dir.join("lovely");
@@ -278,6 +298,7 @@ impl PatchTable {
 
                 toml_files
             })
+            .unique()
             .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
