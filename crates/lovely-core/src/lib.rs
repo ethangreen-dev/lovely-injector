@@ -16,7 +16,9 @@ use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
-use sys::{LuaLib, LuaState, LUA};
+use sys::{LuaLib, LuaState, LuaModule, LUA};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -445,18 +447,14 @@ impl PatchTable {
     /// # Safety
     /// Unsafe due to internal unchecked usages of raw lua state.
     pub unsafe fn inject_metadata(&self, state: *mut LuaState) {
-        let table = vec![
-            ("mod_dir", self.mod_dir.to_str().unwrap().replace('\\', "/")),
-            ("version", env!("CARGO_PKG_VERSION").to_string()),
-        ];
+        let mod_dir = self.mod_dir.to_str().unwrap().replace('\\', "/");
+        let repo = "https://github.com/ethangreen-dev/lovely-injector";
 
-        let mut code = include_str!("../lovely.lua").to_string();
-        for (field, value) in table {
-            let field = format!("lovely_template:{field}");
-            code = code.replace(&field, &value);
-        }
-
-        sys::load_module(state, "lovely", &code, self.loadbuffer.as_ref().unwrap())
+        LuaModule::new()
+            .add_var("repo", repo)
+            .add_var("version", env!("CARGO_PKG_VERSION"))
+            .add_var("mod_dir", &mod_dir)
+            .commit(state);
     }
 
     /// Apply one or more patches onto the target's buffer.
