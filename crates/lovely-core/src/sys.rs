@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 
 use itertools::Itertools;
 use libloading::Library;
+
 use log::info;
 
 pub static LUA: OnceLock<LuaLib> = OnceLock::new();
@@ -49,6 +50,10 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: unsafe extern "C" fn(*mut LuaState) -> c_int, n: c_int);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const c_char;
     pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
+    pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
+    pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
+    pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
 });
 
 impl LuaLib {
@@ -67,9 +72,139 @@ impl LuaLib {
             lua_pushcclosure: *library.get(b"lua_pushcclosure").unwrap(),
             lua_tolstring: *library.get(b"lua_tolstring").unwrap(),
             lua_type: *library.get(b"lua_type").unwrap(),
+            lual_register: *library.get(b"luaL_register").unwrap(),
+            lua_pushstring: *library.get(b"lua_pushstring").unwrap(),
+            lua_pushnumber: *library.get(b"lua_pushnumber").unwrap(),
+            lua_settable: *library.get(b"lua_settable").unwrap(),
         }
     }
 }
+
+/// A trait which allows the implementing value to generically push its value onto the Lua stack.
+pub trait Pushable {
+    /// Push this value onto the Lua stack.
+    /// 
+    /// # Safety
+    /// Directly interacts with native Lua state.
+    unsafe fn push(&self, state: *mut LuaState);
+}
+
+impl Pushable for String {
+    unsafe fn push(&self, state: *mut LuaState) {
+        let value = format!("{self}\0");
+        lua_pushstring(state, value.as_ptr() as _);
+    }
+}
+
+impl Pushable for &str {
+    unsafe fn push(&self, state: *mut LuaState) {
+        let value = format!("{self}\0");
+        lua_pushstring(state, value.as_ptr() as _);
+    }
+}
+
+impl Pushable for isize {
+    unsafe fn push(&self, state: *mut LuaState) {
+        lua_pushnumber(state, *self as _);
+    }
+}
+
+/// A lua FFI entry. Used specifically by lual_register to register
+/// a module and its associated functions into the lua runtime.
+pub struct LuaReg {
+    name: String,
+    func: unsafe extern "C" fn(*mut LuaState) -> isize,
+}
+
+pub struct LuaVar<P: Pushable> {
+    name: String,
+    val: P,
+}
+
+pub struct LuaModule<P: Pushable> {
+    reg: Vec<LuaReg>,
+    var: Vec<LuaVar<P>>,
+}
+
+impl<P: Pushable> LuaModule<P> {
+    pub fn new() -> Self {
+        LuaModule {
+            reg: vec![],
+            var: vec![],
+        }
+    }
+
+    /// Register a native C FFI function to this Lua module.
+    pub fn add_reg(self, name: &'static str, func: unsafe extern "C" fn(*mut LuaState) -> isize) -> Self {
+        let name = format!("{name}\0");
+        let mut reg = self.reg;
+        reg.push(LuaReg {
+            name,
+            func,
+        });
+
+        Self {
+            reg,
+            var: self.var,
+        }
+    }
+
+    /// Add a variable to this Lua module.
+    pub fn add_var(self, name: &'static str, val: P) -> Self {
+        let name = format!("{name}\0");
+        let mut var = self.var;
+        var.push(LuaVar {
+            name,
+            val,
+        });
+
+        LuaModule {
+            reg: self.reg,
+            var,
+        }
+    }
+
+    /// Commit this Lua module to native Lua state.
+    /// 
+    /// # Safety
+    /// Directly interacts and mutates native Lua state.
+    pub unsafe fn commit(self, state: *mut LuaState) {
+        // Convert self.reg into a raw array of name:func pairs, represented as native c_void pointers.
+        let native_reg: Vec<*const c_void> = self
+            .reg
+            .iter()
+            .map(|reg| {
+                let name = &reg.name;
+                let func = reg.func;
+
+                vec![name.as_ptr() as *const c_void, func as *const c_void]
+            })
+        .flatten()
+            .chain(vec![0 as _, 0 as _])
+            .collect();
+
+        // Register the name:func table within the Lua runtime.
+        let reg_ptr = native_reg.as_ptr() as *const c_void;
+        lual_register(state, b"lovely\0".as_ptr() as _, reg_ptr);
+
+        // Now we register variables onto the lovely global table.
+        let top = lua_gettop(state);
+        lua_getfield(state, LUA_GLOBALSINDEX, b"lovely\0".as_ptr() as _);
+
+        for lua_var in self.var.iter() {
+            // Push the var name and value onto the stack.
+            lua_pushstring(state, lua_var.name.as_ptr() as _);
+            lua_var.val.push(state);
+
+            // Set the table key:val from what we previously pushed onto the stack.
+            lua_settable(state, -3);
+        }
+
+        // Reset the stack.
+        lua_settop(state, top);
+    }
+}
+
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
