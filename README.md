@@ -24,6 +24,21 @@ Note: You cannot run your game through Steam on Mac due to a bug within the Stea
 
 **Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 
+### Building from source for Windows
+_Please only do this if you know what you're doing!_
+
+Browsers and anti virus software _really_ don't like downloaded dlls. One way to get around this is to disable your anti virus software, but because Lovely is built in rust it is pretty straighforward to build yourself. (The steps for Mac should be similar just with the appropriate target)
+
+To do this follow these steps:
+
+1. Install Rust + Cargo if you don't already have it, by following the instructions [here](https://www.rust-lang.org/tools/install).
+2. You may need to add the necessary target for your platform.
+    - For Windows: `rustup target add x86_64-pc-windows-msvc`
+3. Clone the repository. `git clone https://github.com/ethangreen-dev/lovely-injector.git`
+4. Build the project using Cargo: `cargo build --target x86_64-pc-windows-msvc` (Or your target platform)
+5. You should now see `~/Lovely-Injector/target/x86_64-pc-windows-msvc/debug`
+6. If everything went correctly then you can copy the `version.dll` from this folder and follow the [Manual Installation Instructions](#manual-installation). 
+
 ## Patches
 
 *Note that the patch format is unstable and prone to change until Lovely is out of early development.*
