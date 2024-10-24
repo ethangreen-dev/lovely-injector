@@ -289,20 +289,20 @@ impl PatchTable {
         for patch_file in patch_files {
             let patch_dir = patch_file.parent().unwrap();
 
+            let mod_relative_path = patch_file.strip_prefix(mod_dir.parent().unwrap_or(mod_dir)).unwrap_or_else(|e| {
+                panic!(
+                    "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
+                    mod_dir.display(),
+                    patch_file.display()
+                )
+            });
+
             // Determine the mod directory from the location of the lovely patch file.
             let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
                 patch_dir.parent().unwrap()
             } else {
                 patch_dir
             };
-
-            let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
-                panic!(
-                    "Mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
-                    mod_dir.display(),
-                    patch_file.display()
-                )
-            });
 
             let mut patch_file: PatchFile = {
                 let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
