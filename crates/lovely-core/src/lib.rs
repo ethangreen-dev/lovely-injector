@@ -286,8 +286,8 @@ impl PatchTable {
         let mut var_table: HashMap<String, String> = HashMap::new();
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
-        for patch_file_path in patch_files {
-            let patch_dir = patch_file_path.parent().unwrap();
+        for patch_file in patch_files {
+            let patch_dir = patch_file.parent().unwrap();
 
             // Determine the mod directory from the location of the lovely patch file.
             let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
@@ -296,19 +296,27 @@ impl PatchTable {
                 patch_dir
             };
 
+            let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
+                panic!(
+                    "Mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
+                    mod_dir.display(),
+                    patch_file.display()
+                )
+            });
+
             let mut patch_file: PatchFile = {
-                let str = fs::read_to_string(&patch_file_path).unwrap_or_else(|e| {
-                    panic!("Failed to read patch file at {patch_file_path:?}:\n{e:?}")
+                let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
+                    panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
                 });
 
                 // Handle invalid fields in a non-explosive way.
                 let ignored_key_callback = |key: serde_ignored::Path| {
-                    warn!("Unknown key `{key}` found in patch file at {patch_file_path:?}, ignoring it");
+                    warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
                 };
 
                 serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
                     .unwrap_or_else(|e| {
-                        panic!("Failed to parse patch file at {patch_file_path:?}:\n{}", e)
+                        panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
                     })
             };
 
@@ -344,7 +352,7 @@ impl PatchTable {
                 patch_file
                     .patches
                     .into_iter()
-                    .map(|patch| (patch, priority, patch_file_path.clone())),
+                    .map(|patch| (patch, priority, mod_relative_path.clone())),
             );
             // TODO concerned about var name conflicts
             var_table.extend(patch_file.vars);
