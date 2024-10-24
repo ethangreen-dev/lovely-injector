@@ -287,15 +287,15 @@ impl PatchTable {
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
         for patch_file in patch_files {
-            let patch_dir = patch_file.parent().unwrap();
-
-            let mod_relative_path = patch_file.strip_prefix(mod_dir.parent().unwrap_or(mod_dir)).unwrap_or_else(|e| {
+            let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
                 panic!(
                     "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
                     mod_dir.display(),
                     patch_file.display()
                 )
             });
+
+            let patch_dir = patch_file.parent().unwrap();
 
             // Determine the mod directory from the location of the lovely patch file.
             let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
