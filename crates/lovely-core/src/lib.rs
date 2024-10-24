@@ -352,7 +352,7 @@ impl PatchTable {
                 patch_file
                     .patches
                     .into_iter()
-                    .map(|patch| (patch, priority, mod_relative_path.clone())),
+                    .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
             );
             // TODO concerned about var name conflicts
             var_table.extend(patch_file.vars);
