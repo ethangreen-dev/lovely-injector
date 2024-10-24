@@ -34,7 +34,7 @@ impl CopyPatch {
         for source in self.sources.iter() {
             let contents = fs::read_to_string(source).unwrap_or_else(|e| {
                 panic!(
-                    "Failed to read source file at {source:?} for patch from {}: {e:?}",
+                    "Failed to read source file at {source:?} for copy patch from {}: {e:?}",
                     path.display()
                 )
             });

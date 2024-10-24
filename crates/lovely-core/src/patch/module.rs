@@ -44,7 +44,7 @@ impl ModulePatch {
         // Read the source file in, converting it to a CString and computing its nulled length.
         let source = fs::read_to_string(&self.source).unwrap_or_else(|e| {
             panic!(
-                "Failed to read module source file for patch from {} at {:?}: {e:?}",
+                "Failed to read module source file for module patch from {} at {:?}: {e:?}",
                 path.display(),
                 &self.source
             )
@@ -75,7 +75,7 @@ impl ModulePatch {
 
         if return_code != 0 {
             log::error!(
-                "Failed to load module {} for patch from {}",
+                "Failed to load module {} for module patch from {}",
                 self.name,
                 path.display()
             );
@@ -88,7 +88,7 @@ impl ModulePatch {
             let return_code = sys::lua_pcall(state, 0, 1, 0);
             if return_code != 0 {
                 log::error!(
-                    "Evaluation of module {} failed for patch from {}",
+                    "Evaluation of module {} failed for module patch from {}",
                     self.name,
                     path.display()
                 );

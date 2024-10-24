@@ -45,7 +45,7 @@ impl PatternPatch {
             .collect_vec();
         if wm_lines.is_empty() {
             log::warn!(
-                "Pattern on target '{target}' for patch from {} has no lines",
+                "Pattern on target '{target}' for pattern patch from {} has no lines",
                 path.display()
             );
             return false;
@@ -82,58 +82,34 @@ impl PatternPatch {
 
         if matches.is_empty() {
             log::warn!(
-                "Pattern '{}' on target '{target}' for patch from {} resulted in no matches",
+                "Pattern '{}' on target '{target}' for pattern patch from {} resulted in no matches",
                 self.pattern.escape_debug(),
                 path.display(),
             );
             return false;
         }
         if let Some(times) = self.times {
-            if matches.len() < times {
-                if wm_lines_len > 1 {
-                    for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
-                        self.pattern,
-                        path.display(),
-                        matches.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
+            fn warn_pattern_mismatch(
+                pattern: &str,
+                target: &str,
+                found_matches: usize,
+                wanted_matches: usize,
+                path: &Path,
+            ) {
+                let warn_msg: String = if pattern.lines().count() > 1 {
+                    format!("Pattern '''\n{pattern}''' on target '{target}' for pattern patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
-                    log::warn!(
-                        "Pattern '{}' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
-                        self.pattern,
-                        path.display(),
-                        matches.len(),
-                        times
-                    );
+                    format!("Pattern '{pattern}' on target '{target}' for pattern patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
+                };
+                for line in warn_msg.lines() {
+                    log::warn!("{}", line)
                 }
             }
+            if matches.len() < times {
+                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
+            }
             if matches.len() > times {
-                if wm_lines_len > 1 {
-                    for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
-                        self.pattern,
-                        path.display(),
-                        matches.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
-                } else {
-                    log::warn!(
-                        "Pattern '{}' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
-                        self.pattern,
-                        path.display(),
-                        matches.len(),
-                        times
-                    );
-                }
+                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
                 log::warn!("Ignoring excess matches");
                 matches.truncate(times);
             }

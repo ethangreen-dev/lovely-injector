@@ -59,19 +59,19 @@ impl RegexPatch {
                     .ignore_whitespace(self.verbose)
             )
             .build(&self.pattern)
-            .unwrap_or_else(|e| panic!("Failed to compile Regex '{}' for patch from {}: {e:?}", path.display(), self.pattern));
+            .unwrap_or_else(|e| panic!("Failed to compile Regex '{}' for regex patch from {}: {e:?}", path.display(), self.pattern));
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::warn!("Regex '{}' on target '{target}' for patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
+            log::warn!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
             return false;
         }
         if let Some(times) = self.times {
             fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize, path: &Path) {
                 let warn_msg: String = if pattern.lines().count() > 1 {
-                    format!("Regex '''\n{pattern}''' on target '{target}' for patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
+                    format!("Regex '''\n{pattern}''' on target '{target}' for regex patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
-                    format!("Regex '{pattern}' on target '{target}' for patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
+                    format!("Regex '{pattern}' on target '{target}' for regex patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 };
                 for line in warn_msg.lines() {
                     log::warn!("{}", line)
@@ -130,11 +130,11 @@ impl RegexPatch {
                 if let Ok(idx) = group_name.parse::<usize>() {
                     groups.get_group(idx)
                         .unwrap_or_else(|| 
-                            panic!("The capture group at index {idx} could not be found in '{base_str}' with the Regex '{}' for patch from {}", self.pattern, path.display()))
+                            panic!("The capture group at index {idx} could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))
                 } else {
                     groups.get_group_by_name(&group_name)
                         .unwrap_or_else(|| 
-                            panic!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex '{}' for patch from {}", self.pattern, path.display()))
+                            panic!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))
                 }
             };
 
