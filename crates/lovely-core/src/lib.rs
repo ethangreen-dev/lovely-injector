@@ -23,7 +23,8 @@ pub mod log;
 pub mod patch;
 pub mod sys;
 
-type LoadBuffer = dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+type LoadBuffer =
+    dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 pub struct Lovely {
     pub mod_dir: PathBuf,
@@ -152,7 +153,7 @@ impl Lovely {
         buf_ptr: *const u8,
         size: isize,
         name_ptr: *const u8,
-        mode_ptr: *const u8
+        mode_ptr: *const u8,
     ) -> u32 {
         // Install native function overrides.
         self.rt_init.call_once(|| {
@@ -223,7 +224,7 @@ pub struct PatchTable {
     loadbuffer: Option<&'static LoadBuffer>,
     targets: HashSet<String>,
     // Unsorted
-    patches: Vec<(Patch, Priority)>,
+    patches: Vec<(Patch, Priority, PathBuf)>,
     vars: HashMap<String, String>,
     // args: HashMap<String, String>,
 }
@@ -281,12 +282,12 @@ impl PatchTable {
             .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
-        let mut patches: Vec<(Patch, Priority)> = Vec::new();
+        let mut patches: Vec<(Patch, Priority, PathBuf)> = Vec::new();
         let mut var_table: HashMap<String, String> = HashMap::new();
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
-        for patch_file in patch_files {
-            let patch_dir = patch_file.parent().unwrap();
+        for patch_file_path in patch_files {
+            let patch_dir = patch_file_path.parent().unwrap();
 
             // Determine the mod directory from the location of the lovely patch file.
             let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
@@ -296,18 +297,18 @@ impl PatchTable {
             };
 
             let mut patch_file: PatchFile = {
-                let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
-                    panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
+                let str = fs::read_to_string(&patch_file_path).unwrap_or_else(|e| {
+                    panic!("Failed to read patch file at {patch_file_path:?}:\n{e:?}")
                 });
 
                 // Handle invalid fields in a non-explosive way.
                 let ignored_key_callback = |key: serde_ignored::Path| {
-                    warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
+                    warn!("Unknown key `{key}` found in patch file at {patch_file_path:?}, ignoring it");
                 };
 
                 serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
                     .unwrap_or_else(|e| {
-                        panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
+                        panic!("Failed to parse patch file at {patch_file_path:?}:\n{}", e)
                     })
             };
 
@@ -320,7 +321,12 @@ impl PatchTable {
                         targets.insert(x.target.clone());
                     }
                     Patch::Module(ref mut x) => {
-                        x.display_source = x.source.clone().into_os_string().into_string().unwrap_or_default();
+                        x.display_source = x
+                            .source
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .unwrap_or_default();
                         x.source = mod_dir.join(&x.source);
                         targets.insert(x.before.clone());
                     }
@@ -338,7 +344,7 @@ impl PatchTable {
                 patch_file
                     .patches
                     .into_iter()
-                    .map(|patch| (patch, priority)),
+                    .map(|patch| (patch, priority, patch_file_path.clone())),
             );
             // TODO concerned about var name conflicts
             var_table.extend(patch_file.vars);
@@ -400,30 +406,30 @@ impl PatchTable {
         let module_patches = self
             .patches
             .iter()
-            .filter_map(|(x, prio)| match x {
-                Patch::Module(patch) => Some((patch, prio)),
+            .filter_map(|(x, prio, path)| match x {
+                Patch::Module(patch) => Some((patch, prio, path)),
                 _ => None,
             })
-            .sorted_by_key(|(_, &prio)| prio)
-            .map(|(x, _)| x);
+            .sorted_by_key(|(_, &prio, _)| prio)
+            .map(|(x, _, path)| (x, path));
         let copy_patches = self
             .patches
             .iter()
-            .filter_map(|(x, prio)| match x {
-                Patch::Copy(patch) => Some((patch, prio)),
+            .filter_map(|(x, prio, path)| match x {
+                Patch::Copy(patch) => Some((patch, prio, path)),
                 _ => None,
             })
-            .sorted_by_key(|(_, &prio)| prio)
-            .map(|(x, _)| x);
+            .sorted_by_key(|(_, &prio, _)| prio)
+            .map(|(x, _, path)| (x, path));
         let pattern_or_regex_patches = self
             .patches
             .iter()
-            .filter_map(|(x, prio)| match x {
-                Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio)),
+            .filter_map(|(x, prio, path)| match x {
+                Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio, path)),
                 _ => None,
             })
-            .sorted_by_key(|(_, &prio)| prio)
-            .map(|(x, _)| x);
+            .sorted_by_key(|(_, &prio, _)| prio)
+            .map(|(x, _, path)| (x, path));
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
@@ -431,8 +437,8 @@ impl PatchTable {
 
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.unwrap();
-        for patch in module_patches {
-            let result = unsafe { patch.apply(target, lua_state, &loadbuffer) };
+        for (patch, path) in module_patches {
+            let result = unsafe { patch.apply(target, lua_state, &path, &loadbuffer) };
 
             if result {
                 patch_count += 1;
@@ -440,21 +446,21 @@ impl PatchTable {
         }
 
         // Apply copy patches.
-        for patch in copy_patches {
-            if patch.apply(target, &mut rope) {
+        for (patch, path) in copy_patches {
+            if patch.apply(target, &mut rope, &path) {
                 patch_count += 1;
             }
         }
 
-        for patch in pattern_or_regex_patches {
+        for (patch, path) in pattern_or_regex_patches {
             match patch {
                 Patch::Pattern(patch) => {
-                    if patch.apply(target, &mut rope) {
+                    if patch.apply(target, &mut rope, &path) {
                         patch_count += 1;
                     }
                 }
                 Patch::Regex(patch) => {
-                    if patch.apply(target, &mut rope) {
+                    if patch.apply(target, &mut rope, &path) {
                         patch_count += 1;
                     }
                 }

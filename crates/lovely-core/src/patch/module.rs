@@ -1,7 +1,7 @@
 use std::{
     ffi::{c_void, CString},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     ptr, slice,
 };
 
@@ -33,6 +33,7 @@ impl ModulePatch {
         &self,
         file_name: &str,
         state: *mut LuaState,
+        path: &Path,
         lual_loadbufferx: &F,
     ) -> bool {
         // Stop if we're not at the correct insertion point.
@@ -41,8 +42,13 @@ impl ModulePatch {
         }
 
         // Read the source file in, converting it to a CString and computing its nulled length.
-        let source = fs::read_to_string(&self.source)
-            .unwrap_or_else(|e| panic!("Failed to read patch file at {:?}: {e:?}", &self.source));
+        let source = fs::read_to_string(&self.source).unwrap_or_else(|e| {
+            panic!(
+                "Failed to read module source file for patch from {} at {:?}: {e:?}",
+                path.display(),
+                &self.source
+            )
+        });
 
         let buf_cstr = CString::new(source.as_str()).unwrap();
         let buf_len = buf_cstr.as_bytes().len();
@@ -68,7 +74,11 @@ impl ModulePatch {
         );
 
         if return_code != 0 {
-            log::error!("Failed to load module {}", self.name);
+            log::error!(
+                "Failed to load module {} for patch from {}",
+                self.name,
+                path.display()
+            );
             sys::lua_settop(state, stack_top);
             return false;
         }
@@ -77,7 +87,11 @@ impl ModulePatch {
             // Evaluate the results of the buffer now
             let return_code = sys::lua_pcall(state, 0, 1, 0);
             if return_code != 0 {
-                log::error!("Evaluation of module failed for {}", self.name);
+                log::error!(
+                    "Evaluation of module {} failed for patch from {}",
+                    self.name,
+                    path.display()
+                );
                 sys::lua_settop(state, stack_top);
                 return false;
             }

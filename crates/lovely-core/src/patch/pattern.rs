@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crop::Rope;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -30,7 +32,7 @@ pub struct PatternPatch {
 impl PatternPatch {
     /// Apply the pattern patch onto the rope.
     /// The return value will be `true` if the rope was modified.
-    pub fn apply(&self, target: &str, rope: &mut Rope) -> bool {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
         if self.target != target {
             return false;
         }
@@ -42,7 +44,10 @@ impl PatternPatch {
             .map(WildMatch::new)
             .collect_vec();
         if wm_lines.is_empty() {
-            log::warn!("Pattern on target '{target}' has no lines");
+            log::warn!(
+                "Pattern on target '{target}' for patch from {} has no lines",
+                path.display()
+            );
             return false;
         }
         let wm_lines_len = wm_lines.len();
@@ -77,8 +82,9 @@ impl PatternPatch {
 
         if matches.is_empty() {
             log::warn!(
-                "Pattern '{}' on target '{target}' resulted in no matches",
-                self.pattern.escape_debug()
+                "Pattern '{}' on target '{target}' for patch from {} resulted in no matches",
+                self.pattern.escape_debug(),
+                path.display(),
             );
             return false;
         }
@@ -86,8 +92,9 @@ impl PatternPatch {
             if matches.len() < times {
                 if wm_lines_len > 1 {
                     for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        "Pattern '''\n{}''' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
                         self.pattern,
+                        path.display(),
                         matches.len(),
                         times
                     )
@@ -97,8 +104,9 @@ impl PatternPatch {
                     }
                 } else {
                     log::warn!(
-                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        "Pattern '{}' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
                         self.pattern,
+                        path.display(),
                         matches.len(),
                         times
                     );
@@ -107,8 +115,9 @@ impl PatternPatch {
             if matches.len() > times {
                 if wm_lines_len > 1 {
                     for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
+                        "Pattern '''\n{}''' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
                         self.pattern,
+                        path.display(),
                         matches.len(),
                         times
                     )
@@ -118,8 +127,9 @@ impl PatternPatch {
                     }
                 } else {
                     log::warn!(
-                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
+                        "Pattern '{}' on target '{target}' for patch from {} resulted in {} matches, wanted {}",
                         self.pattern,
+                        path.display(),
                         matches.len(),
                         times
                     );

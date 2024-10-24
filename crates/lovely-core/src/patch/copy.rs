@@ -1,6 +1,9 @@
 use crop::Rope;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -21,7 +24,7 @@ impl CopyPatch {
     /// modify the buffer.
     /// If the name *is* a valid target of this patch, prepend or append the source file(s)'s contents
     /// and return true.
-    pub fn apply(&self, target: &str, rope: &mut Rope) -> bool {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
         if self.target != target {
             return false;
         }
@@ -29,8 +32,12 @@ impl CopyPatch {
         // Merge the provided payloads into a single buffer. Each source path should
         // be made absolute by the patch loader.
         for source in self.sources.iter() {
-            let contents = fs::read_to_string(source)
-                .unwrap_or_else(|e| panic!("Failed to read patch file at {source:?}: {e:?}"));
+            let contents = fs::read_to_string(source).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to read source file at {source:?} for patch from {}: {e:?}",
+                    path.display()
+                )
+            });
 
             // Append or prepend the patch's lines onto the provided buffer.
             match self.position {
