@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crop::Rope;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -30,7 +32,7 @@ pub struct PatternPatch {
 impl PatternPatch {
     /// Apply the pattern patch onto the rope.
     /// The return value will be `true` if the rope was modified.
-    pub fn apply(&self, target: &str, rope: &mut Rope) -> bool {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
         if self.target != target {
             return false;
         }
@@ -42,7 +44,10 @@ impl PatternPatch {
             .map(WildMatch::new)
             .collect_vec();
         if wm_lines.is_empty() {
-            log::warn!("Pattern on target '{target}' has no lines");
+            log::warn!(
+                "Pattern on target '{target}' for pattern patch from {} has no lines",
+                path.display()
+            );
             return false;
         }
         let wm_lines_len = wm_lines.len();
@@ -77,53 +82,34 @@ impl PatternPatch {
 
         if matches.is_empty() {
             log::warn!(
-                "Pattern '{}' on target '{target}' resulted in no matches",
-                self.pattern.escape_debug()
+                "Pattern '{}' on target '{target}' for pattern patch from {} resulted in no matches",
+                self.pattern.escape_debug(),
+                path.display(),
             );
             return false;
         }
         if let Some(times) = self.times {
-            if matches.len() < times {
-                if wm_lines_len > 1 {
-                    for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        matches.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
+            fn warn_pattern_mismatch(
+                pattern: &str,
+                target: &str,
+                found_matches: usize,
+                wanted_matches: usize,
+                path: &Path,
+            ) {
+                let warn_msg: String = if pattern.lines().count() > 1 {
+                    format!("Pattern '''\n{pattern}''' on target '{target}' for pattern patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
-                    log::warn!(
-                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        matches.len(),
-                        times
-                    );
+                    format!("Pattern '{pattern}' on target '{target}' for pattern patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
+                };
+                for line in warn_msg.lines() {
+                    log::warn!("{}", line)
                 }
             }
+            if matches.len() < times {
+                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
+            }
             if matches.len() > times {
-                if wm_lines_len > 1 {
-                    for line in format!(
-                        "Pattern '''\n{}''' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        matches.len(),
-                        times
-                    )
-                    .lines()
-                    {
-                        log::warn!("{}", line);
-                    }
-                } else {
-                    log::warn!(
-                        "Pattern '{}' on target '{target}' resulted in {} matches, wanted {}",
-                        self.pattern,
-                        matches.len(),
-                        times
-                    );
-                }
+                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
                 log::warn!("Ignoring excess matches");
                 matches.truncate(times);
             }
