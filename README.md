@@ -26,6 +26,7 @@ Note: You cannot run your game through Steam on Mac due to a bug within the Stea
 
 ### Building from source for Windows
 _Please only do this if you know what you're doing!_
+_If you need unfamiliar with using git then do not try this approach_
 
 Browsers and anti virus software _really_ don't like downloaded dlls. One way to get around this is to disable your anti virus software, but because Lovely is built in rust it is pretty straighforward to build yourself. (The steps for Mac should be similar just with the appropriate target)
 
