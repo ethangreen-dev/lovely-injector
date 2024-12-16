@@ -309,6 +309,12 @@ impl PatchTable {
                     panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
                 });
 
+                // HACK: Replace instances of {{lovely:patch_file_path}} with patch_file.
+                let clean_mod_dir = &mod_dir
+                    .to_string_lossy()
+                    .replace("\\", "\\\\");
+                let str = str.replace("{{lovely:mod_dir}}", clean_mod_dir);
+
                 // Handle invalid fields in a non-explosive way.
                 let ignored_key_callback = |key: serde_ignored::Path| {
                     warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
