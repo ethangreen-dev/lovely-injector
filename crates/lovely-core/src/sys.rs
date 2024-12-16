@@ -120,16 +120,18 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     let mut out = VecDeque::new();
 
     for _ in 0..argc {
+
+        // We call Lua's builtin tostring function because we don't have access to the 5.3 luaL_tolstring
+        // helper function. It's not pretty, but it works.
+        lua_getfield(state, LUA_GLOBALSINDEX, b"tostring\0".as_ptr() as _);
+        lua_pushvalue(state, -2);
+        lua_call(state, 1, 1);
+
         let mut str_len = 0_isize;
         let arg_str = lua_tolstring(state, -1, &mut str_len);
 
-        let arg_str = match arg_str.is_null() {
-            true => String::from("nil"),
-            false => {
-                let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
-                String::from_utf8_lossy(str_buf).to_string()
-            }
-        };
+        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len as _);
+        let arg_str = String::from_utf8_lossy(str_buf).to_string();
 
         out.push_front(arg_str);
         lua_settop(state, -(1) - 1);
