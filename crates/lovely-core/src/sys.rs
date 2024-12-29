@@ -5,7 +5,6 @@ use std::{
 };
 
 use itertools::Itertools;
-use libc::FILE;
 use libloading::{Library, Symbol};
 use log::info;
 use once_cell::sync::Lazy;
