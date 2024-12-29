@@ -2,7 +2,7 @@ use std::{
     ffi::{c_void, CString},
     fs,
     path::{Path, PathBuf},
-    ptr, slice,
+    ptr,
 };
 
 use crate::sys::{self, lua_identity_closure, LuaState};
