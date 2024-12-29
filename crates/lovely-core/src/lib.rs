@@ -15,6 +15,7 @@ use crop::Rope;
 use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
+use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
 
@@ -32,11 +33,12 @@ pub struct Lovely {
     loadbuffer: &'static LoadBuffer,
     patch_table: PatchTable,
     rt_init: Once,
+    dump_all: bool,
 }
 
 impl Lovely {
     /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer) -> Self {
+    pub fn init(loadbuffer: &'static LoadBuffer, dump_all: bool) -> Self {
         let start = Instant::now();
 
         let args = std::env::args().skip(1).collect_vec();
@@ -93,6 +95,7 @@ impl Lovely {
                 loadbuffer,
                 patch_table: Default::default(),
                 rt_init: Once::new(),
+                dump_all,
             };
         }
 
@@ -138,6 +141,7 @@ impl Lovely {
             loadbuffer,
             patch_table,
             rt_init: Once::new(),
+            dump_all,
         }
     }
 
@@ -176,7 +180,7 @@ impl Lovely {
         };
 
         // Stop here if no valid patch exists for this target.
-        if !self.patch_table.needs_patching(name) {
+        if !self.patch_table.needs_patching(name) && !self.dump_all {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
@@ -192,22 +196,50 @@ impl Lovely {
             panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}")
         });
 
+        // Apply patches onto this buffer.
         let patched = self.patch_table.apply_patches(name, buf_str, state);
 
-        let patch_dump = self
-            .mod_dir
-            .join("lovely")
-            .join("dump")
-            .join(name.replace('@', ""));
+        let pretty_name = if name.starts_with("=[") {
+            let regex = Regex::new(r#"=\[(\w+)(?: (\w+))? "([^"]+)"\]"#).unwrap();
+            let mut new_name = String::new();
+            for capture in regex.captures_iter(name) {
+                let f1 = capture.get(1).map_or("", |x| x.as_str());
+                let f2 = capture.get(2).map_or("", |x| x.as_str());
+                let f3 = capture.get(3).map_or("", |x| x.as_str());
+                new_name = format!("{f1}/{f2}/{f3}");
+            };
 
-        let dump_parent = patch_dump.parent().unwrap();
-        if !dump_parent.is_dir() {
-            fs::create_dir_all(dump_parent).unwrap();
-        }
+            new_name
+        } else {
+            name.replace("@", "")
+        };
 
-        // Write the patched file to the dump, moving on if an error occurs.
-        if let Err(e) = fs::write(&patch_dump, &patched) {
-            error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
+        if pretty_name.chars().count() <= 100 {
+            let patch_dump = self
+                .mod_dir
+                .join("lovely")
+                .join("dump")
+                .join(&pretty_name);
+
+            let dump_parent = patch_dump.parent().unwrap();
+            if !dump_parent.is_dir() {
+                if let Err(e) = fs::create_dir_all(dump_parent) {
+                    error!("Failed to create directory at {dump_parent:?}: {e:?}");
+                }
+            }
+
+            // Write the patched file to the dump, moving on if an error occurs.
+            if let Err(e) = fs::write(&patch_dump, &patched) {
+                error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
+            }
+
+            let mut patch_meta = patch_dump;
+            patch_meta.set_extension("txt");
+
+            // HACK: Replace the @ symbol on the fly because that's what devs are used to.
+            if let Err(e) = fs::write(&patch_meta, name.replacen("@", "", 1)) {
+                error!("Failed to write patch metadata to {patch_meta:?}: {e:?}");
+            };
         }
 
         let raw = CString::new(patched).unwrap();
@@ -461,7 +493,7 @@ impl PatchTable {
 
         // Apply copy patches.
         for (patch, path) in copy_patches {
-            if patch.apply(target, &mut rope, &path) {
+            if patch.apply(target, &mut rope, path) {
                 patch_count += 1;
             }
         }
@@ -469,12 +501,12 @@ impl PatchTable {
         for (patch, path) in pattern_or_regex_patches {
             match patch {
                 Patch::Pattern(patch) => {
-                    if patch.apply(target, &mut rope, &path) {
+                    if patch.apply(target, &mut rope, path) {
                         patch_count += 1;
                     }
                 }
                 Patch::Regex(patch) => {
-                    if patch.apply(target, &mut rope, &path) {
+                    if patch.apply(target, &mut rope, path) {
                         patch_count += 1;
                     }
                 }
