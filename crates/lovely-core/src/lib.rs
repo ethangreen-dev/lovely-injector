@@ -24,6 +24,8 @@ pub mod log;
 pub mod patch;
 pub mod sys;
 
+pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 type LoadBuffer =
     dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
@@ -70,8 +72,7 @@ impl Lovely {
 
         log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
 
-        let version = env!("CARGO_PKG_VERSION");
-        info!("Lovely {version}");
+        info!("Lovely {LOVELY_VERSION}");
 
         let mut is_vanilla = false;
 
