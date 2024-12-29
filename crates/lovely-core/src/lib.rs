@@ -199,27 +199,18 @@ impl Lovely {
         // Apply patches onto this buffer.
         let patched = self.patch_table.apply_patches(name, buf_str, state);
 
-        let pretty_name = if name.starts_with("=[") {
-            let regex = Regex::new(r#"=\[(\w+)(?: (\w+))? "([^"]+)"\]"#).unwrap();
-            let mut new_name = String::new();
-            for capture in regex.captures_iter(name) {
-                let f1 = capture.get(1).map_or("", |x| x.as_str());
-                let f2 = capture.get(2).map_or("", |x| x.as_str());
-                let f3 = capture.get(3).map_or("", |x| x.as_str());
-                new_name = format!("{f1}/{f2}/{f3}");
-            };
-
-            new_name
+        let regex = Regex::new(r#"=\[(\w+)(?: (\w+))? "([^"]+)"\]"#).unwrap();
+        let pretty_name = if let Some(capture) = regex.captures(name) {
+            let f1 = capture.get(1).map_or("", |x| x.as_str());
+            let f2 = capture.get(2).map_or("", |x| x.as_str());
+            let f3 = capture.get(3).map_or("", |x| x.as_str());
+            format!("{f1}/{f2}/{f3}")
         } else {
             name.replace("@", "")
         };
 
         if pretty_name.chars().count() <= 100 {
-            let patch_dump = self
-                .mod_dir
-                .join("lovely")
-                .join("dump")
-                .join(&pretty_name);
+            let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
 
             let dump_parent = patch_dump.parent().unwrap();
             if !dump_parent.is_dir() {
@@ -342,9 +333,7 @@ impl PatchTable {
                 });
 
                 // HACK: Replace instances of {{lovely:patch_file_path}} with patch_file.
-                let clean_mod_dir = &mod_dir
-                    .to_string_lossy()
-                    .replace("\\", "\\\\");
+                let clean_mod_dir = &mod_dir.to_string_lossy().replace("\\", "\\\\");
                 let str = str.replace("{{lovely:mod_dir}}", clean_mod_dir);
 
                 // Handle invalid fields in a non-explosive way.
