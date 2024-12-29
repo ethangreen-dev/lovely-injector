@@ -1,5 +1,5 @@
 use lovely_core::sys::{LuaState, LUA_LIB};
-use std::ptr::null;
+use std::{env, ptr::null};
 
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
@@ -37,7 +37,10 @@ unsafe extern "C" fn luaL_loadbufferx(
 
 #[ctor::ctor]
 unsafe fn construct() {
-    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e));
+    let args: Vec<_> = env::args().collect();
+    let dump_all = args.contains(&"--dump-all".to_string());
+
+    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), dump_all);
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
