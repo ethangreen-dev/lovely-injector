@@ -14,6 +14,15 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ### Mac
 
+#### Bundle Installation (Easy)
+1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin-installer.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin-installer.tar.gz`
+2. Open the .zip archive, copy `assets`, `liblovely.dylib` and `install_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
+3. Run `install_lovely.sh`, which will generate an app bundle, `Balatro + Mods.app`, in your user applications directory (`~/Applications`).
+4. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
+If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
+5. Open `Balatro + Mods.app`, either directly from `~/Applications`, or from Launchpad, and enjoy.
+
+#### Classic Installation (Advanced)
 1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
 2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 3. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
