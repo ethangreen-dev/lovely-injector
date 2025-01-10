@@ -14,22 +14,27 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ### Mac
 
-#### Bundle Installation (Easy)
-1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin-installer.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin-installer.tar.gz`
-2. Open the .zip archive, copy `assets`, `liblovely.dylib` and `install_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-3. Run `install_lovely.sh`, which will generate an app bundle, `Balatro + Mods.app`, in your user applications directory (`~/Applications`).
-4. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
-If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
-5. Open `Balatro + Mods.app`, either directly from `~/Applications`, or from Launchpad, and enjoy.
+1. Put your desired mods into the mod directory for your game. NOTE: this is **not** the same folder as the game directory.
+  - For Balatro, this should be in `~/Library/Application Support/Balatro/Mods`.
+  - To navigate to this folder directly, open Finder and press `⇧ Shift + ⌘ Command + G`. Then paste `~/Library/Application Support/Balatro` and press `Enter`. Then, double-click on (or create, if it does not exist) the folder `Mods`.
+2. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) of Lovely Injector for Mac.
+  - If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`.
+  - If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`.
+3. Extract the `.tar.gz` archive to a folder of your chosing and open it. NOTE: Preferably the archive will be extracted **outside** of any game directories, in a neutral place, such as `Downloads`.
+4. Run `run_lovely.sh` and, following directions, select the option to either...
+  - *Run a game with the injector, directly*, one time, or...
+  - *Create a modded application bundle*, which will allow you to run and inject Lovely automatically, using a convenient shortcut in Applications.
 
-#### Classic Installation (Advanced)
-1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
-2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-3. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
-If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
-4. Run the game by either dragging and dropping `run_lovely.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely.sh` in the terminal within the game directory.
+#### Notes for Steam Games:
 
-Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely.sh` script.
+- When asked for the `Path to Application`, you can find this by navigating to the game's directory in Finder using Steam:
+  1. Open your Steam library
+  2. Right-click the game in the left-hand sidebar
+  3. Select "Manage" from the context-menu
+  4. Select "Browse local files" from the window that appears.
+  5. Drag-and-drop the `.app` in the folder into the terminal window. E.G `Balatro.app`
+- You cannot run your game through Steam directly on Mac due to a limitation of macOS applications. You must run it with the `run_lovely.sh` script, or alternatively, using a modded application bundle created with `run_lovely.sh`, which serves as a direct launcher for the modded version of the game.
+  - You can, however, add modded application bundles to your Steam library as a "Non-Steam Game" from the `Game` menu of the Steam client. 
 
 **Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 
