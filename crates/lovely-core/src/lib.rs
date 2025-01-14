@@ -276,7 +276,8 @@ impl PatchTable {
                     info!("Found .lovelyignore in '{dirname}', skipping it.");
                 }
                 !ignore_file.is_file()
-            });
+            })
+            .sorted_by(|x, a| x.file_name().cmp(&a.file_name()));
 
         let patch_files = mod_dirs
             .flat_map(|dir| {
@@ -297,6 +298,7 @@ impl PatchTable {
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().unwrap() == "toml")
+                        .sorted_by(|x, a| x.file_name().cmp(&a.file_name()))
                         .collect_vec();
                     toml_files.append(&mut subfiles);
                 }
