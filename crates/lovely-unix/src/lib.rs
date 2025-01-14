@@ -1,5 +1,7 @@
 use lovely_core::sys::{LuaState, LUA_LIB};
 use std::{env, ptr::null};
+use std::panic;
+use lovely_core::log::*;
 
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
@@ -37,6 +39,10 @@ unsafe extern "C" fn luaL_loadbufferx(
 
 #[ctor::ctor]
 unsafe fn construct() {
+    panic::set_hook(Box::new(|x| {
+        let message = format!("lovely-injector has crashed: \n{x}");
+        error!("{message}");
+    }));
     let args: Vec<_> = env::args().collect();
     let dump_all = args.contains(&"--dump-all".to_string());
 
