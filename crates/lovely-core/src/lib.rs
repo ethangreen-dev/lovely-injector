@@ -14,7 +14,7 @@ use log::*;
 use crop::Rope;
 use getargs::{Arg, Options};
 use itertools::Itertools;
-use patch::{Patch, PatchFile, Priority};
+use patch::{pattern, regex, Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
@@ -450,6 +450,7 @@ impl PatchTable {
             })
             .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
+
         let copy_patches = self
             .patches
             .iter()
@@ -459,11 +460,22 @@ impl PatchTable {
             })
             .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
-        let pattern_or_regex_patches = self
+
+        let pattern_patches = self
             .patches
             .iter()
             .filter_map(|(x, prio, path)| match x {
-                Patch::Pattern(_) | Patch::Regex(_) => Some((x, prio, path)),
+                Patch::Pattern(patch) => Some((patch, prio, path)),
+                _ => None,
+            })
+            .sorted_by_key(|(_, &prio, _)| prio)
+            .map(|(x, _, path)| (x, path));
+
+        let regex_patches = self
+            .patches
+            .iter()
+            .filter_map(|(x, prio, path)| match x {
+                Patch::Regex(patch) => Some((patch, prio, path)),
                 _ => None,
             })
             .sorted_by_key(|(_, &prio, _)| prio)
@@ -490,19 +502,15 @@ impl PatchTable {
             }
         }
 
-        for (patch, path) in pattern_or_regex_patches {
-            match patch {
-                Patch::Pattern(patch) => {
-                    if patch.apply(target, &mut rope, path) {
-                        patch_count += 1;
-                    }
-                }
-                Patch::Regex(patch) => {
-                    if patch.apply(target, &mut rope, path) {
-                        patch_count += 1;
-                    }
-                }
-                _ => unreachable!(),
+        for (patch, path) in pattern_patches {
+            if patch.apply(target, &mut rope, path) {
+                patch_count += 1;
+            }
+        }
+
+        for (patch, path) in regex_patches {
+            if patch.apply(target, &mut rope, path) {
+                patch_count += 1;
             }
         }
 
