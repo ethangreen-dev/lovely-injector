@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 
 use core::slice;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
@@ -259,6 +260,20 @@ impl PatchTable {
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
+        fn filename_cmp(first: &PathBuf, second: &PathBuf) -> Ordering {
+            let first = first
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_lowercase();
+            let second = second
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_lowercase();
+            first.cmp(&second)
+        }
+
         let mod_dirs = fs::read_dir(mod_dir)
             .unwrap_or_else(|e| {
                 panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}")
@@ -277,7 +292,7 @@ impl PatchTable {
                 }
                 !ignore_file.is_file()
             })
-            .sorted_by(|x, a| x.file_name().cmp(&a.file_name()));
+            .sorted_by(|a, b| filename_cmp(a, b));
 
         let patch_files = mod_dirs
             .flat_map(|dir| {
@@ -298,7 +313,7 @@ impl PatchTable {
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().unwrap() == "toml")
-                        .sorted_by(|x, a| x.file_name().cmp(&a.file_name()))
+                        .sorted_by(|a, b| filename_cmp(a, b))
                         .collect_vec();
                     toml_files.append(&mut subfiles);
                 }
