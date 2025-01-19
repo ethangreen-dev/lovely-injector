@@ -92,13 +92,13 @@ jobs:
           pip3 install cargo-zigbuild
 
       - name: Build
-        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-mac --release
+        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-unix --release
 
       - name: Compress tar.gz
         run: |
-          cp ./crates/lovely-mac/run_lovely.sh ./target/${{ matrix.target }}/release/
+          cp ./crates/lovely-unix/run_lovely_macos.sh ./target/${{ matrix.target }}/release/
           cd ./target/${{ matrix.target }}/release/
-          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely.sh
+          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely_macos.sh
           mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
 
       - name: Submit build artifact

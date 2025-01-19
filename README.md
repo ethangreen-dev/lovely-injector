@@ -17,12 +17,12 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 ### Mac
 
 1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
-2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
+2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely_macos.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
 3. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
 If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
-4. Run the game by either dragging and dropping `run_lovely.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely.sh` in the terminal within the game directory.
+4. Run the game by either dragging and dropping `run_lovely_macos.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely_macos.sh` in the terminal within the game directory.
 
-Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely.sh` script.
+Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely_macos.sh` script.
 
 **Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 
@@ -36,20 +36,20 @@ Note: You cannot run your game through Steam on Mac due to a bug within the Stea
 version = "1.0.0"
 priority = 0
 
-# Define a var substitution rule. This searches for lines that contain {{lovely:var_name}} 
-# (var_name from this example, it can really be anything) and replaces each match with the 
+# Define a var substitution rule. This searches for lines that contain {{lovely:var_name}}
+# (var_name from this example, it can really be anything) and replaces each match with the
 # provided value.
 # This example would transform print('{{lovely:var_name}}') to print('Hello world!').
-# 
-# USEFUL: For when you want to reduce the complexity of repetitive injections, eg. embedding 
+#
+# USEFUL: For when you want to reduce the complexity of repetitive injections, eg. embedding
 # release version numbers in multiple locations.
 [vars]
 var_name = "Hello world!"
 
-# Inject one or more lines of code before, after, or at (replacing) a line which matches 
+# Inject one or more lines of code before, after, or at (replacing) a line which matches
 # the provided pattern.
 #
-# USEFUL: For when you need to add / modify a small amount of code to setup initialization 
+# USEFUL: For when you need to add / modify a small amount of code to setup initialization
 # routines, etc.
 [[patches]]
 [patches.pattern]
@@ -63,16 +63,16 @@ print('{{lovely:var_name}}')
 match_indent = true
 times = 1
 
-# Inject one or more lines of code before, after, at, or interwoven into one or more 
+# Inject one or more lines of code before, after, at, or interwoven into one or more
 # Regex capture groups.
-# - I recommend you to use a Regex playground like https://regexr.com to build 
+# - I recommend you to use a Regex playground like https://regexr.com to build
 #   your patterns.
 # - Regex is NOT EFFICIENT. Please use the pattern patch unless absolutely necessary.
 # - This patch has capture group support.
-# - This patch does NOT trim whitespace from each line. Take that into account when 
+# - This patch does NOT trim whitespace from each line. Take that into account when
 #   designing your pattern.
 #
-# USEFUL: For when the pattern patch is not expressive enough to describe how the 
+# USEFUL: For when the pattern patch is not expressive enough to describe how the
 # payload should be injected.
 [patches.regex]
 target = "tag.lua"
@@ -93,7 +93,7 @@ times = 1
 
 # Append or prepend the contents of one or more files onto the target.
 #
-# USEFUL: For when you *only* care about getting your code into the game, nothing else. 
+# USEFUL: For when you *only* care about getting your code into the game, nothing else.
 # This does NOT inject it as a new module.
 [[patches]]
 [patches.copy]
