@@ -476,25 +476,17 @@ impl PatchTable {
             .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
 
-        let pattern_patches = self
+        let pattern_and_regex = self
             .patches
             .iter()
-            .filter_map(|(x, prio, path)| match x {
-                Patch::Pattern(patch) => Some((patch, prio, path)),
-                _ => None,
-            })
-            .sorted_by_key(|(_, &prio, _)| prio)
-            .map(|(x, _, path)| (x, path));
-
-        let regex_patches = self
-            .patches
-            .iter()
-            .filter_map(|(x, prio, path)| match x {
-                Patch::Regex(patch) => Some((patch, prio, path)),
-                _ => None,
-            })
-            .sorted_by_key(|(_, &prio, _)| prio)
-            .map(|(x, _, path)| (x, path));
+            .filter(|(patch, _, _)| matches!(patch, Patch::Pattern(..)))
+            .chain(self
+                .patches
+                .iter()
+                .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))))
+            .sorted_by_key(|(_, prio, _)| prio)
+            .map(|(patch, _, path)| (patch, path))
+            .collect_vec();
 
         // For display + debug use. Incremented every time a patch is applied.
         let mut patch_count = 0;
@@ -517,14 +509,14 @@ impl PatchTable {
             }
         }
 
-        for (patch, path) in pattern_patches {
-            if patch.apply(target, &mut rope, path) {
-                patch_count += 1;
-            }
-        }
+        for (patch, path) in pattern_and_regex {
+            let result = match patch {
+                Patch::Pattern(x) => x.apply(target, &mut rope, path),
+                Patch::Regex(x) => x.apply(target, &mut rope, path),
+                _ => unreachable!()
+            };
 
-        for (patch, path) in regex_patches {
-            if patch.apply(target, &mut rope, path) {
+            if result {
                 patch_count += 1;
             }
         }
