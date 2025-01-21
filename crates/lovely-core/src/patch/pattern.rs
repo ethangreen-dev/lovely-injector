@@ -116,11 +116,11 @@ impl PatternPatch {
         }
 
         // Track the +/- index offset caused by previous line injections.
-        let mut line_delta = 0;
+        let mut line_delta: isize = 0;
 
         for (line_idx, indent) in matches {
-            let start = rope.byte_of_line(line_idx + line_delta);
-            let end = rope.byte_of_line(line_idx + line_delta + wm_lines_len);
+            let start = rope.byte_of_line(line_idx.saturating_add_signed(line_delta));
+            let end = rope.byte_of_line(line_idx.saturating_add_signed(line_delta) + wm_lines_len);
 
             let mut payload = self
                 .payload
@@ -130,7 +130,7 @@ impl PatternPatch {
             if !self.payload.ends_with('\n') {
                 payload.push('\n');
             }
-            let payload_lines = payload.lines().count();
+            let payload_lines = payload.lines().count() as isize;
 
             match self.position {
                 InsertPosition::Before => {
@@ -143,7 +143,7 @@ impl PatternPatch {
                 }
                 InsertPosition::At => {
                     line_delta += payload_lines;
-                    line_delta -= wm_lines_len;
+                    line_delta -= wm_lines_len as isize;
                     rope.delete(start..end);
                     rope.insert(start, &payload);
                 }
