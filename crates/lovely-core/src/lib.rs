@@ -211,9 +211,10 @@ impl Lovely {
             name.replace("@", "")
         };
 
-        if pretty_name.chars().count() <= 100 {
-            let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
+        let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
 
+        // Check to see if the dump file already exists to fix a weird panic specific to Wine.
+        if pretty_name.chars().count() <= 100 && !fs::exists(&patch_dump).unwrap() {
             let dump_parent = patch_dump.parent().unwrap();
             if !dump_parent.is_dir() {
                 if let Err(e) = fs::create_dir_all(dump_parent) {
