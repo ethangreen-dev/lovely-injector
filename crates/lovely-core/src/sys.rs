@@ -138,7 +138,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
         let arg_str = String::from_utf8_lossy(str_buf).to_string();
 
         out.push_front(arg_str);
-        lua_settop(state, -(1) - 1);
+        lua_settop(state,  -3);
     }
 
     let msg = out.into_iter().join("\t");
