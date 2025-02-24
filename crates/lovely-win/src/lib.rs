@@ -88,15 +88,14 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     let dump_all = args.contains(&"--dump-all".to_string());
 
-    let love_version_info =
-        util::get_version("love.dll").unwrap_or_else(|err| panic!("Could not unwrap love version info"));
+    let love_version_value = util::load_version().unwrap_or_else(|err| panic!("{err}"));
 
     // Quick and easy hook injection. Load the lua51.dll module at runtime, determine the address of the luaL_loadbuffer fn, hook it.
     let handle =
         LoadLibraryW(w!("lua51.dll")).unwrap_or_else(|err| panic!("Could not find love.dll"));
 
     const LOVE_11_4: u32 = (11 << 16) + 4;
-    if love_version_info.dwFileVersionMS > LOVE_11_4 {
+    if love_version_value > LOVE_11_4 {
         // Detour with loadbuferx
 
         // Initialize the lovely runtime.
