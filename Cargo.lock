@@ -416,6 +416,7 @@ dependencies = [
  "forward-dll",
  "itertools",
  "libc",
+ "libloading",
  "lovely-core",
  "once_cell",
  "retour",
