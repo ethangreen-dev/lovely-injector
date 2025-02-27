@@ -1,7 +1,8 @@
-use lovely_core::sys::{LuaState, LUA_LIB};
-use std::{env, ptr::null};
+use libloading::Library;
+use lovely_core::sys::{get_lua_lib, set_lua_lib, LuaState};
+use std::ptr::null;
 use std::panic;
-use lovely_core::log::*;
+use lovely_core::{log::*, LovelyConfig};
 
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
@@ -10,7 +11,7 @@ static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
 static RECALL: Lazy<
     unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32,
-> = Lazy::new(|| unsafe { *LUA_LIB.get(b"luaL_loadbufferx").unwrap() });
+> = Lazy::new(|| unsafe { *get_lua_lib().get(b"luaL_loadbufferx").unwrap() });
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -43,10 +44,14 @@ unsafe fn construct() {
         let message = format!("lovely-injector has crashed: \n{x}");
         error!("{message}");
     }));
-    let args: Vec<_> = env::args().collect();
-    let dump_all = args.contains(&"--dump-all".to_string());
 
-    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), dump_all);
+    if cfg!(target_os = "linux") {
+        set_lua_lib(Library::new("libluajit-5.1.so.2").unwrap());
+    } else if cfg!(target_os = "macos") {
+        set_lua_lib(Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap());
+    }
+
+    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), LovelyConfig::init_from_environment());
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));

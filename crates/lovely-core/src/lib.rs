@@ -15,7 +15,7 @@ use log::*;
 use crop::Rope;
 use getargs::{Arg, Options};
 use itertools::Itertools;
-use patch::{pattern, regex, Patch, PatchFile, Priority};
+use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::LuaState;
@@ -30,24 +30,47 @@ pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 type LoadBuffer =
     dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
+pub struct LovelyDumpInfo {
+    pub dump_dir: PathBuf,
+    pub dump_all: bool,
+}
+
+pub struct LovelyConfig {
+    pub mod_dir: Option<PathBuf>,
+    pub log_dir: Option<PathBuf>,
+
+    pub dump: Option<LovelyDumpInfo>,
+
+    pub is_vanilla: bool,
+}
+
 pub struct Lovely {
     pub mod_dir: PathBuf,
     pub is_vanilla: bool,
+    pub dump: Option<LovelyDumpInfo>,
     loadbuffer: &'static LoadBuffer,
     patch_table: PatchTable,
     rt_init: Once,
-    dump_all: bool,
 }
 
-impl Lovely {
-    /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer, dump_all: bool) -> Self {
-        let start = Instant::now();
+impl Default for LovelyConfig {
+    fn default() -> Self {
+        return LovelyConfig {
+            mod_dir: None,
+            log_dir: None,
+            dump: None,
+            is_vanilla: false,
+        };
+    }
+}
 
-        let args = std::env::args().skip(1).collect_vec();
+impl LovelyConfig {
+    pub fn init_from_environment() -> Self {
+        let args: Vec<String> = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
         let cur_exe =
             env::current_exe().expect("Failed to get the path of the current executable.");
+
         let game_name = if env::consts::OS == "macos" {
             cur_exe
                 .parent()
@@ -67,15 +90,16 @@ impl Lovely {
                 .to_string_lossy()
                 .replace(".", "_")
         };
-        let mut mod_dir = dirs::config_dir().unwrap().join(game_name).join("Mods");
+
+        let mut mod_dir: PathBuf = dirs::config_dir().expect("Platform doesn't have a config directory.").join(&game_name).join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
 
         log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
 
-        info!("Lovely {LOVELY_VERSION}");
-
         let mut is_vanilla = false;
+        let mut do_dump = true;
+        let mut dump_all: bool = false;
 
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
             match opt {
@@ -83,53 +107,85 @@ impl Lovely {
                     mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir)
                 }
                 Arg::Long("vanilla") => is_vanilla = true,
+                Arg::Long("no-dump") => do_dump = false,
+                Arg::Long("dump-all") => {
+                    dump_all = true;
+                    do_dump = true
+                }
                 _ => (),
             }
         }
 
+        let mut dump: Option<LovelyDumpInfo> = None;
+
+        if do_dump {
+            dump = Some(LovelyDumpInfo {
+                dump_dir: mod_dir.join("lovely").join("dump"),
+                dump_all,
+            });
+        }
+
+        return LovelyConfig {
+            mod_dir: Some(mod_dir),
+            log_dir: Some(log_dir),
+            dump,
+            is_vanilla,
+        };
+    }
+}
+
+impl Lovely {
+    /// Initialize the Lovely patch runtime.
+    pub fn init(loadbuffer: &'static LoadBuffer, config: LovelyConfig) -> Self {
+        let start = Instant::now();
+
+        let mod_dir = config
+            .mod_dir
+            .expect("Config must include a mod directory.");
+
+        if let Some(log_dir) = config.log_dir {
+            log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
+            info!("Writing logs to {log_dir:?}");
+        }
+
+        info!("Lovely {LOVELY_VERSION}");
+
         // Stop here if we're running in vanilla mode.
-        if is_vanilla {
+        if config.is_vanilla {
             info!("Running in vanilla mode");
 
             return Lovely {
                 mod_dir,
-                is_vanilla,
+                is_vanilla: true,
+                dump: config.dump,
+
                 loadbuffer,
                 patch_table: Default::default(),
                 rt_init: Once::new(),
-                dump_all,
             };
         }
 
-        // Validate that an older Lovely install doesn't already exist within the game directory.
-        let exe_path = env::current_exe().unwrap();
-        let game_dir = exe_path.parent().unwrap();
-        let dwmapi = game_dir.join("dwmapi.dll");
-
-        if dwmapi.is_file() {
-            panic!(
-                "An old Lovely installation was detected within the game directory. \
-                This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
-            );
-        }
-
-        info!("Game directory is at {game_dir:?}");
-        info!("Writing logs to {log_dir:?}");
-
         if !mod_dir.is_dir() {
-            info!("Creating mods directory at {mod_dir:?}");
+            info!("Creating mods directory at {mod_dir:?}",);
             fs::create_dir_all(&mod_dir).unwrap();
         }
 
-        info!("Using mod directory at {mod_dir:?}");
+        info!("Using mod directory at {mod_dir:?}",);
         let patch_table = PatchTable::load(&mod_dir).with_loadbuffer(loadbuffer);
 
-        let dump_dir = mod_dir.join("lovely").join("dump");
-        if dump_dir.is_dir() {
-            info!("Cleaning up dumps directory at {dump_dir:?}");
-            fs::remove_dir_all(&dump_dir).unwrap_or_else(|e| {
-                panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}")
-            });
+        if let Some(dump) = &config.dump {
+            if dump.dump_dir.is_dir() {
+                info!(
+                    "Cleaning up dumps directory at {dump_dir:?}",
+                    dump_dir = dump.dump_dir
+                );
+                fs::remove_dir_all(&dump.dump_dir).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}",
+                        dump_dir = dump.dump_dir
+                    )
+                });
+            }
         }
 
         info!(
@@ -138,12 +194,12 @@ impl Lovely {
         );
 
         Lovely {
-            mod_dir,
-            is_vanilla,
+            mod_dir: mod_dir,
+            is_vanilla: false,
+            dump: config.dump,
             loadbuffer,
             patch_table,
             rt_init: Once::new(),
-            dump_all,
         }
     }
 
@@ -182,7 +238,9 @@ impl Lovely {
         };
 
         // Stop here if no valid patch exists for this target.
-        if !self.patch_table.needs_patching(name) && !self.dump_all {
+        if !self.patch_table.needs_patching(name)
+            && !(self.dump.as_ref().is_some() && self.dump.as_ref().unwrap().dump_all)
+        {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
@@ -211,29 +269,31 @@ impl Lovely {
             name.replace("@", "")
         };
 
-        let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
+        if let Some(dump_info) = &self.dump {
+            let patch_dump = dump_info.dump_dir.join(&pretty_name);
 
-        // Check to see if the dump file already exists to fix a weird panic specific to Wine.
-        if pretty_name.chars().count() <= 100 && !fs::exists(&patch_dump).unwrap() {
-            let dump_parent = patch_dump.parent().unwrap();
-            if !dump_parent.is_dir() {
-                if let Err(e) = fs::create_dir_all(dump_parent) {
-                    error!("Failed to create directory at {dump_parent:?}: {e:?}");
+            // Check to see if the dump file already exists to fix a weird panic specific to Wine.
+            if pretty_name.chars().count() <= 100 && !fs::exists(&patch_dump).unwrap() {
+                let dump_parent = patch_dump.parent().unwrap();
+                if !dump_parent.is_dir() {
+                    if let Err(e) = fs::create_dir_all(dump_parent) {
+                        error!("Failed to create directory at {dump_parent:?}: {e:?}");
+                    }
                 }
+
+                // Write the patched file to the dump, moving on if an error occurs.
+                if let Err(e) = fs::write(&patch_dump, &patched) {
+                    error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
+                }
+
+                let mut patch_meta = patch_dump;
+                patch_meta.set_extension("txt");
+
+                // HACK: Replace the @ symbol on the fly because that's what devs are used to.
+                if let Err(e) = fs::write(&patch_meta, name.replacen("@", "", 1)) {
+                    error!("Failed to write patch metadata to {patch_meta:?}: {e:?}");
+                };
             }
-
-            // Write the patched file to the dump, moving on if an error occurs.
-            if let Err(e) = fs::write(&patch_dump, &patched) {
-                error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
-            }
-
-            let mut patch_meta = patch_dump;
-            patch_meta.set_extension("txt");
-
-            // HACK: Replace the @ symbol on the fly because that's what devs are used to.
-            if let Err(e) = fs::write(&patch_meta, name.replacen("@", "", 1)) {
-                error!("Failed to write patch metadata to {patch_meta:?}: {e:?}");
-            };
         }
 
         let raw = CString::new(patched).unwrap();
@@ -262,16 +322,8 @@ impl PatchTable {
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
         fn filename_cmp(first: &PathBuf, second: &PathBuf) -> Ordering {
-            let first = first
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_lowercase();
-            let second = second
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_lowercase();
+            let first = first.file_name().unwrap().to_string_lossy().to_lowercase();
+            let second = second.file_name().unwrap().to_string_lossy().to_lowercase();
             first.cmp(&second)
         }
 
@@ -481,10 +533,11 @@ impl PatchTable {
             .patches
             .iter()
             .filter(|(patch, _, _)| matches!(patch, Patch::Pattern(..)))
-            .chain(self
-                .patches
-                .iter()
-                .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))))
+            .chain(
+                self.patches
+                    .iter()
+                    .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
+            )
             .sorted_by_key(|(_, prio, _)| prio)
             .map(|(patch, _, path)| (patch, path))
             .collect_vec();
@@ -514,7 +567,7 @@ impl PatchTable {
             let result = match patch {
                 Patch::Pattern(x) => x.apply(target, &mut rope, path),
                 Patch::Regex(x) => x.apply(target, &mut rope, path),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             if result {

@@ -3,7 +3,9 @@ use std::ffi::c_void;
 use std::panic;
 
 use itertools::Itertools;
+use libloading::Library;
 use lovely_core::log::*;
+use lovely_core::sys::set_lua_lib;
 use lovely_core::sys::LuaState;
 use lovely_core::Lovely;
 use lovely_core::LOVELY_VERSION;
@@ -58,6 +60,8 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
+    set_lua_lib(Library::new("lua51.dll").unwrap());
+
     let args = env::args().collect_vec();
 
     if args.contains(&"--disable-mods".to_string()) || args.contains(&"-d".to_string()) {
@@ -70,6 +74,18 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     }
 
     let dump_all = args.contains(&"--dump-all".to_string());
+
+    // Validate that an older Lovely install doesn't already exist within the game directory.
+    let exe_path = env::current_exe().unwrap();
+    let game_dir = exe_path.parent().unwrap();
+    let dwmapi = game_dir.join("dwmapi.dll");
+
+    if dwmapi.is_file() {
+        panic!(
+            "An old Lovely installation was detected within the game directory. \
+            This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
+        );
+    }
 
     // Initialize the lovely runtime.
     let rt = Lovely::init(

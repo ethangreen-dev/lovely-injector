@@ -498,6 +498,7 @@ dependencies = [
  "android_log",
  "ctor",
  "jni",
+ "libloading",
  "log 0.4.26",
  "lovely-core",
  "once_cell",
@@ -531,6 +532,7 @@ name = "lovely-unix"
 version = "0.1.0"
 dependencies = [
  "ctor",
+ "libloading",
  "lovely-core",
  "once_cell",
 ]
@@ -542,6 +544,7 @@ dependencies = [
  "forward-dll",
  "itertools",
  "libc",
+ "libloading",
  "lovely-core",
  "once_cell",
  "retour",
