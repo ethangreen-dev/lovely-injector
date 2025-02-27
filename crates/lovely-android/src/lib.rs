@@ -1,7 +1,7 @@
 #[macro_use] extern crate log;
 extern crate android_log;
 
-use std::panic;
+use std::{ffi::{c_char, CStr}, panic, path::PathBuf};
 
 use libloading::Library;
 use lovely_core::{sys::{get_lua_lib, set_lua_lib, LuaState}, Lovely, LovelyConfig};
@@ -14,7 +14,7 @@ static RECALL: Lazy<
 > = Lazy::new(|| unsafe { *get_lua_lib().get(b"luaL_loadbufferx").unwrap() });
 
 #[no_mangle]
-unsafe extern "C" fn init() {
+unsafe extern "C" fn init(path: *const c_char) {
 
     android_log::init("Lovely").unwrap();
 
@@ -25,7 +25,12 @@ unsafe extern "C" fn init() {
     set_lua_lib(Library::new("libluajit.so").unwrap());
 
     RUNTIME
-        .set(Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), LovelyConfig::init_from_environment()))
+        .set(Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), LovelyConfig {
+            mod_dir: Some(PathBuf::from(CStr::from_ptr(path).to_str().unwrap().to_owned())),
+            log_dir: None,
+            dump: None,
+            is_vanilla: false
+        }))
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
 }
 

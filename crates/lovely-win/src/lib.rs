@@ -89,7 +89,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     // Initialize the lovely runtime.
     let rt = Lovely::init(
-        &|a: *mut c_void, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
+        &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
         dump_all,
     );
     RUNTIME

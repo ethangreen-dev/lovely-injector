@@ -237,6 +237,8 @@ impl Lovely {
             }
         };
 
+        info!("Hooking into module {name}!");
+
         // Stop here if no valid patch exists for this target.
         if !self.patch_table.needs_patching(name)
             && !(self.dump.as_ref().is_some() && self.dump.as_ref().unwrap().dump_all)
@@ -349,6 +351,9 @@ impl PatchTable {
 
         let patch_files = mod_dirs
             .flat_map(|dir| {
+                
+                debug!("Searching directory {dir:?}");
+
                 let lovely_toml = dir.join("lovely.toml");
                 let lovely_dir = dir.join("lovely");
                 let mut toml_files = Vec::new();
@@ -358,6 +363,8 @@ impl PatchTable {
                 }
 
                 if lovely_dir.is_dir() {
+                    debug!("Found lovely directory {lovely_dir:?}");
+
                     let mut subfiles = fs::read_dir(&lovely_dir)
                         .unwrap_or_else(|_| {
                             panic!("Failed to read from lovely directory at '{lovely_dir:?}'.")
@@ -368,6 +375,7 @@ impl PatchTable {
                         .filter(|x| x.extension().unwrap() == "toml")
                         .sorted_by(|a, b| filename_cmp(a, b))
                         .collect_vec();
+
                     toml_files.append(&mut subfiles);
                 }
 
@@ -381,6 +389,9 @@ impl PatchTable {
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
         for patch_file in patch_files {
+
+            debug!("Loading patch file {patch_file:?}");
+
             let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
                 panic!(
                     "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
@@ -456,6 +467,8 @@ impl PatchTable {
             var_table.extend(patch_file.vars);
         }
 
+        debug!("Loaded {patchCount} patches from {mod_dir:?}", patchCount = patches.len());
+
         PatchTable {
             mod_dir: mod_dir.to_path_buf(),
             loadbuffer: None,
@@ -504,9 +517,12 @@ impl PatchTable {
     pub unsafe fn apply_patches(
         &self,
         target: &str,
-        buffer: &str,
+        input_buffer: &str,
         lua_state: *mut LuaState,
     ) -> String {
+        
+        let buffer = input_buffer.replace("\r\n", "\n");
+
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
