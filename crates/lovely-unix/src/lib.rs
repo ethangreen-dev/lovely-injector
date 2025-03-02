@@ -1,8 +1,8 @@
+use lovely_core::log::*;
 use lovely_core::sys::{LuaState, LUA_LIB};
+use std::panic;
 use std::sync::{LazyLock, OnceLock};
 use std::{env, ptr::null};
-use std::panic;
-use lovely_core::log::*;
 
 use lovely_core::Lovely;
 

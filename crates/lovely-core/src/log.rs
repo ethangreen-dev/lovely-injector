@@ -1,12 +1,12 @@
-use std::path::Path;
-use std::io::Write;
 use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
 use std::sync::{OnceLock, RwLock};
 
 use chrono::Local;
 
 // Exports for convenience.
-pub use log::{info, error, warn, debug, trace, LevelFilter};
+pub use log::{debug, error, info, trace, warn, LevelFilter};
 
 use log::{Level, Log, Metadata, Record, SetLoggerError};
 
@@ -30,7 +30,7 @@ impl Log for LovelyLogger {
         } else {
             format!("{} - [♥] {}", record.level(), record.args())
         };
-                
+
         if self.enabled(record.metadata()) && self.use_console {
             println!("{msg}");
         }
@@ -52,7 +52,7 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
 
     let now = Local::now();
     let timestamp = now.format("%Y.%m.%d-%H.%M.%S");
-    
+
     let log_name = format!("lovely-{timestamp}.log");
     let log_path = log_dir.join(log_name);
     let log_file = File::create(&log_path)
@@ -62,6 +62,6 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
         use_console: true,
         log_file: RwLock::new(log_file),
     };
-    
+
     log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info))
 }
