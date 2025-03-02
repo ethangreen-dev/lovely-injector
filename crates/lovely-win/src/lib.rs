@@ -1,6 +1,7 @@
 use std::env;
 use std::ffi::c_void;
 use std::panic;
+use std::sync::{LazyLock, OnceLock};
 
 use itertools::Itertools;
 use lovely_core::log::*;
@@ -8,8 +9,6 @@ use lovely_core::sys::LuaState;
 use lovely_core::Lovely;
 use lovely_core::LOVELY_VERSION;
 
-use once_cell::sync::Lazy;
-use once_cell::sync::OnceCell;
 use retour::static_detour;
 use widestring::U16CString;
 use windows::core::{s, w, PCWSTR};
@@ -18,14 +17,14 @@ use windows::Win32::System::Console::{AllocConsole, SetConsoleTitleW};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 
-static RUNTIME: OnceCell<Lovely> = OnceCell::new();
+static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 static_detour! {
     pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8,*const u8) -> u32;
 }
 
-static WIN_TITLE: Lazy<U16CString> =
-    Lazy::new(|| U16CString::from_str(format!("Lovely {LOVELY_VERSION}")).unwrap());
+static WIN_TITLE: LazyLock<U16CString> =
+    LazyLock::new(|| U16CString::from_str(format!("Lovely {LOVELY_VERSION}")).unwrap());
 
 unsafe extern "C" fn lua_loadbufferx_detour(
     state: *mut LuaState,
@@ -34,7 +33,7 @@ unsafe extern "C" fn lua_loadbufferx_detour(
     name_ptr: *const u8,
     mode_ptr: *const u8,
 ) -> u32 {
-    let rt = RUNTIME.get_unchecked();
+    let rt = RUNTIME.get().unwrap_unchecked();
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr)
 }
 
