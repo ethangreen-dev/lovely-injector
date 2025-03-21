@@ -10,5 +10,4 @@ crate-type = ["cdylib"]
 [dependencies]
 lovely-core = { version ="0.7.1", path = "../lovely-core" }
 
-once_cell = "1.19.0"
 ctor = "0.2.7"
