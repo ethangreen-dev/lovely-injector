@@ -1,0 +1,12 @@
+[package]
+name = "dobby-sys"
+version = "0.1.0"
+edition = "2021"
+authors = ["black-binary <blackbinary@qq.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/black-binary/dobby-sys/"
+description = "An unsafe rust binding for Dobby"
+keywords = ["hook","android","dobby","pwn"]
+
+[build-dependencies]
+#bindgen = "0.59"
