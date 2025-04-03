@@ -188,6 +188,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dobby-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b8fbf3688f3584f3f87ec7024032d81da6e8b868a1d23d8a6c0a399e7c9935"
+dependencies = [
+ "dobby-sys",
+ "thiserror",
+]
+
+[[package]]
+name = "dobby-sys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cdffdeaa52be950db80677f22f549050675f226b77e97fdbe10bb2dd846ac7b"
+
+[[package]]
 name = "either"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -398,6 +414,16 @@ dependencies = [
  "toml",
  "walkdir",
  "wildmatch",
+]
+
+[[package]]
+name = "lovely-mac"
+version = "0.1.0"
+dependencies = [
+ "ctor",
+ "dobby-rs",
+ "lovely-core",
+ "once_cell",
 ]
 
 [[package]]
