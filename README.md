@@ -27,6 +27,7 @@ chmod +x setup.sh
 ./setup.sh
 ```
 This will remove the quarantine attribute from `liblovely.dylib` and set up a shell alias so you can launch the game by typing `balatro` in your terminal.
+
 5. After running the setup script, you can launch the game by typing `balatro` in any terminal window, or by executing `sh run_lovely_macos.sh` in the terminal within the game directory.
 
 5. Run the game by either dragging and dropping `run_lovely_macos.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely_macos.sh` in the terminal within the game directory.
