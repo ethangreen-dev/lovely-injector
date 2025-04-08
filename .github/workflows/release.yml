@@ -97,8 +97,9 @@ jobs:
       - name: Compress tar.gz
         run: |
           cp ./crates/lovely-unix/run_lovely_macos.sh ./target/${{ matrix.target }}/release/
+          cp ./crates/lovely-unix/setup_lovely_macos.sh ./target/${{ matrix.target }}/release/
           cd ./target/${{ matrix.target }}/release/
-          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely_macos.sh
+          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely_macos.sh setup_lovely_macos.sh
           mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
 
       - name: Submit build artifact
