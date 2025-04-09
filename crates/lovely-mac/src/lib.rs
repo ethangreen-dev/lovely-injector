@@ -18,20 +18,6 @@ static RECALL: Lazy<
         *const u8,
         *const u8,
     ) -> u32 = *LUA_LIB.get(b"luaL_loadbufferx").unwrap();
-    // let lua_loadbufferx_2: unsafe extern "C" fn(
-    //     *mut LuaState,
-    //     *const u8,
-    //     isize,
-    //     *const u8,
-    //     *const u8,
-    // ) -> u32 = mem::transmute(
-    //     resolve_symbol(
-    //         "/Users/english5040/Library/Application Support/Steam/steamapps/common/Balatro/Balatro.app/Contents/Frameworks/Lua.framework/Versions/A/Lua",
-    //         "luaL_loadbufferx",
-    //     )
-    //     .unwrap(),
-    // );
-    // assert!(lua_loadbufferx == lua_loadbufferx_2);
     let orig = hook(
         lua_loadbufferx as *mut c_void,
         lua_loadbufferx_detour as *mut c_void,
@@ -72,12 +58,8 @@ unsafe fn construct() {
     let args: Vec<_> = env::args().collect();
     let dump_all = args.contains(&"--dump-all".to_string());
 
-    let recall = Lazy::force(&RECALL);
-
     let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), dump_all);
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
-
-    info!("old func addr: {recall:p}");
 }
