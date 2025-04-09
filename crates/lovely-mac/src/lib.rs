@@ -40,6 +40,18 @@ static RECALL: Lazy<
     mem::transmute(orig)
 });
 
+#[no_mangle]
+#[allow(non_snake_case)]
+unsafe extern "C" fn luaL_loadbuffer(
+    state: *mut LuaState,
+    buf_ptr: *const u8,
+    size: isize,
+    name_ptr: *const u8,
+) -> u32 {
+    let rt = RUNTIME.get_unchecked();
+    rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, std::ptr::null())
+}
+
 unsafe extern "C" fn lua_loadbufferx_detour(
     state: *mut LuaState,
     buf_ptr: *const u8,
