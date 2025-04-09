@@ -1,0 +1,88 @@
+diff --git a/src/lauxlib.h b/src/lauxlib.h
+index a44f0272..f2541a5b 100644
+--- a/src/lauxlib.h
++++ b/src/lauxlib.h
+@@ -81,6 +81,8 @@ LUALIB_API int luaL_fileresult(lua_State *L, int stat, const char *fname);
+ LUALIB_API int luaL_execresult(lua_State *L, int stat);
+ LUALIB_API int (luaL_loadfilex) (lua_State *L, const char *filename,
+ 				 const char *mode);
++LUALIB_API int (lovely_loadbufferx) (lua_State *L, const char *buff, size_t sz,
++				   const char *name, const char *mode);
+ LUALIB_API int (luaL_loadbufferx) (lua_State *L, const char *buff, size_t sz,
+ 				   const char *name, const char *mode);
+ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
+diff --git a/src/lib_aux.c b/src/lib_aux.c
+index 4b4664a7..c3b91359 100644
+--- a/src/lib_aux.c
++++ b/src/lib_aux.c
+@@ -22,6 +22,7 @@
+ #include "lj_trace.h"
+ #include "lj_lib.h"
+ #include "lj_vmevent.h"
++#include "lovely.h"
+ 
+ #if LJ_TARGET_POSIX
+ #include <sys/wait.h>
+@@ -351,6 +352,7 @@ static void *mem_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+ 
+ LUALIB_API lua_State *luaL_newstate(void)
+ {
++  lovely_init(lovely_loadbufferx);
+   lua_State *L = lua_newstate(mem_alloc, NULL);
+   if (L) {
+     G(L)->panic = panic;
+@@ -369,6 +371,7 @@ LUALIB_API lua_State *luaL_newstate(void)
+ 
+ LUALIB_API lua_State *luaL_newstate(void)
+ {
++  lovely_init(lovely_loadbufferx);
+   lua_State *L;
+ #if LJ_64 && !LJ_GC64
+   L = lj_state_newstate(LJ_ALLOCF_INTERNAL, NULL);
+diff --git a/src/lj_load.c b/src/lj_load.c
+index 24b660a8..daa8ef29 100644
+--- a/src/lj_load.c
++++ b/src/lj_load.c
+@@ -22,6 +22,7 @@
+ #include "lj_lex.h"
+ #include "lj_bcdump.h"
+ #include "lj_parse.h"
++#include "lovely.h"
+ 
+ /* -- Load Lua source code and bytecode ----------------------------------- */
+ 
+@@ -150,7 +151,7 @@ static const char *reader_string(lua_State *L, void *ud, size_t *size)
+   return ctx->str;
+ }
+ 
+-LUALIB_API int luaL_loadbufferx(lua_State *L, const char *buf, size_t size,
++LUALIB_API int lovely_loadbufferx(lua_State *L, const char *buf, size_t size,
+ 				const char *name, const char *mode)
+ {
+   StringReaderCtx ctx;
+@@ -159,6 +160,11 @@ LUALIB_API int luaL_loadbufferx(lua_State *L, const char *buf, size_t size,
+   return lua_loadx(L, reader_string, &ctx, name, mode);
+ }
+ 
++LUALIB_API int luaL_loadbufferx(lua_State *L, const char *buf, size_t size,
++				const char *name, const char *mode)
++{
++  return lovely_apply_patches(L, buf, size, name, mode);
++}
+ LUALIB_API int luaL_loadbuffer(lua_State *L, const char *buf, size_t size,
+ 			       const char *name)
+ {
+diff --git a/src/lovely.h b/src/lovely.h
+new file mode 100644
+index 00000000..f850d867
+--- /dev/null
++++ b/src/lovely.h
+@@ -0,0 +1,8 @@
++#ifndef LOVELY_H
++#define LOVELY_H
++
++void lovely_init(void *loadbufferx);
++
++int lovely_apply_patches(lua_State *L, const char *buff, size_t sz,
++    const char *name, const char *mode);
++#endif // LOVELY_H
