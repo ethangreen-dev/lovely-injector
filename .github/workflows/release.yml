@@ -89,7 +89,7 @@ jobs:
 
       - name: Install cargo-zigbuild
         run: |
-          pip3 install cargo-zigbuild
+          pip3 install ziglang==0.13.0.post1 cargo-zigbuild
 
       - name: Build
         run: cargo zigbuild --target ${{ matrix.target }} --package lovely-unix --release
