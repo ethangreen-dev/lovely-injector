@@ -60,6 +60,12 @@ impl Lovely {
                 .strip_suffix(".app")
                 .expect("Parent directory of current executable path was not an .app")
                 .replace(".", "_")
+        } else if env::consts::OS == "linux" {
+            PathBuf::from(&args[0])
+                .file_stem()
+                .expect("Failed to get file_stem component of current executable path.")
+                .to_string_lossy()
+                .replace(".", "_")
         } else {
             cur_exe
                 .file_stem()
