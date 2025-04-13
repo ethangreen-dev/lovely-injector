@@ -10,3 +10,4 @@ keywords = ["hook","android","dobby","pwn"]
 
 [build-dependencies]
 #bindgen = "0.59"
+cmake = "0.1"
