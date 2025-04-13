@@ -60,12 +60,6 @@ impl Lovely {
                 .strip_suffix(".app")
                 .expect("Parent directory of current executable path was not an .app")
                 .replace(".", "_")
-        } else if env::consts::OS == "linux" {
-            PathBuf::from(&args[0])
-                .file_stem()
-                .expect("Failed to get file_stem component of current executable path.")
-                .to_string_lossy()
-                .replace(".", "_")
         } else {
             cur_exe
                 .file_stem()
@@ -73,8 +67,13 @@ impl Lovely {
                 .to_string_lossy()
                 .replace(".", "_")
         };
-        let mut mod_dir = dirs::data_dir().unwrap().join(&game_name).join("Mods");
-        if !mod_dir.is_dir() {
+        let mut mod_dir = dirs::config_dir().unwrap().join(&game_name).join("Mods");
+        if env::consts::OS == "linux" && !mod_dir.is_dir() {
+            let game_name = PathBuf::from(&args[0])
+                .file_stem()
+                .expect("Failed to get file_stem component of current executable path.")
+                .to_string_lossy()
+                .replace(".", "_");
             mod_dir = dirs::data_dir().unwrap().join(game_name).join("Mods");
         }
 
