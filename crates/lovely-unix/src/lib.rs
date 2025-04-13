@@ -1,8 +1,8 @@
-use lovely_core::sys::{LuaState, LUA_LIB};
-use std::{env, ptr::null};
-use std::panic;
 use lovely_core::log::*;
+use lovely_core::sys::{LuaState, LUA_LIB};
+use std::{env, ffi::c_void, mem, panic};
 
+use dobby_rs::{hook, resolve_symbol};
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
 
@@ -10,7 +10,21 @@ static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
 static RECALL: Lazy<
     unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32,
-> = Lazy::new(|| unsafe { *LUA_LIB.get(b"luaL_loadbufferx").unwrap() });
+> = Lazy::new(|| unsafe {
+    let lua_loadbufferx: unsafe extern "C" fn(
+        *mut LuaState,
+        *const u8,
+        isize,
+        *const u8,
+        *const u8,
+    ) -> u32 = *LUA_LIB.get(b"luaL_loadbufferx").unwrap();
+    let orig = hook(
+        lua_loadbufferx as *mut c_void,
+        lua_loadbufferx_detour as *mut c_void,
+    )
+    .unwrap();
+    mem::transmute(orig)
+});
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -21,12 +35,10 @@ unsafe extern "C" fn luaL_loadbuffer(
     name_ptr: *const u8,
 ) -> u32 {
     let rt = RUNTIME.get_unchecked();
-    rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, null())
+    rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, std::ptr::null())
 }
 
-#[no_mangle]
-#[allow(non_snake_case)]
-unsafe extern "C" fn luaL_loadbufferx(
+unsafe extern "C" fn lua_loadbufferx_detour(
     state: *mut LuaState,
     buf_ptr: *const u8,
     size: isize,

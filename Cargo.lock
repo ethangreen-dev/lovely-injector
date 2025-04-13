@@ -430,20 +430,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "lovely-mac"
-version = "0.1.0"
-dependencies = [
- "ctor",
- "dobby-rs",
- "lovely-core",
- "once_cell",
-]
-
-[[package]]
 name = "lovely-unix"
 version = "0.1.0"
 dependencies = [
  "ctor",
+ "dobby-rs",
  "lovely-core",
  "once_cell",
 ]
