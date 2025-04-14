@@ -46,28 +46,33 @@ impl Lovely {
 
         let args = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
-        let cur_exe =
-            env::current_exe().expect("Failed to get the path of the current executable.");
-        let game_name = if env::consts::OS == "macos" {
-            cur_exe
-                .parent()
-                .and_then(Path::parent)
-                .and_then(Path::parent)
-                .expect("Couldn't find parent .app of current executable path")
-                .file_name()
-                .expect("Failed to get file_name of parent directory of current executable")
-                .to_string_lossy()
-                .strip_suffix(".app")
-                .expect("Parent directory of current executable path was not an .app")
-                .replace(".", "_")
+
+        let mut mod_dir = if let Some(env_path) = env::var_os("LOVELY_MOD_DIR") {
+            PathBuf::from(env_path)
         } else {
-            cur_exe
-                .file_stem()
-                .expect("Failed to get file_stem component of current executable path.")
-                .to_string_lossy()
-                .replace(".", "_")
+            let cur_exe =
+                env::current_exe().expect("Failed to get the path of the current executable.");
+            let game_name = if env::consts::OS == "macos" {
+                cur_exe
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::parent)
+                    .expect("Couldn't find parent .app of current executable path")
+                    .file_name()
+                    .expect("Failed to get file_name of parent directory of current executable")
+                    .to_string_lossy()
+                    .strip_suffix(".app")
+                    .expect("Parent directory of current executable path was not an .app")
+                    .replace(".", "_")
+            } else {
+                cur_exe
+                    .file_stem()
+                    .expect("Failed to get file_stem component of current executable path.")
+                    .to_string_lossy()
+                    .replace(".", "_")
+            };
+            dirs::config_dir().unwrap().join(game_name).join("Mods")
         };
-        let mut mod_dir = dirs::config_dir().unwrap().join(game_name).join("Mods");
 
         let log_dir = mod_dir.join("lovely").join("log");
 
