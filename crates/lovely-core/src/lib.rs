@@ -77,12 +77,6 @@ impl Lovely {
             mod_dir = dirs::data_dir().unwrap().join(game_name).join("Mods");
         }
 
-        let log_dir = mod_dir.join("lovely").join("log");
-
-        log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
-
-        info!("Lovely {LOVELY_VERSION}");
-
         let mut is_vanilla = false;
 
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
@@ -94,6 +88,12 @@ impl Lovely {
                 _ => (),
             }
         }
+
+        let log_dir = mod_dir.join("lovely").join("log");
+
+        log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
+
+        info!("Lovely {LOVELY_VERSION}");
 
         // Stop here if we're running in vanilla mode.
         if is_vanilla {
