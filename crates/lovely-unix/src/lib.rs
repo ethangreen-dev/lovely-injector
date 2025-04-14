@@ -2,7 +2,6 @@ use lovely_core::log::*;
 use lovely_core::sys::{LuaState, LUA_LIB};
 use std::{env, ffi::c_void, mem, panic};
 
-use dobby_rs::{hook, resolve_symbol};
 use lovely_core::Lovely;
 use once_cell::sync::{Lazy, OnceCell};
 
@@ -18,7 +17,7 @@ static RECALL: Lazy<
         *const u8,
         *const u8,
     ) -> u32 = *LUA_LIB.get(b"luaL_loadbufferx").unwrap();
-    let orig = hook(
+    let orig = dobby_rs::hook(
         lua_loadbufferx as *mut c_void,
         lua_loadbufferx_detour as *mut c_void,
     )
