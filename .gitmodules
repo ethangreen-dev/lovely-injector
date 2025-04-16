@@ -1,0 +1,3 @@
+[submodule "Dobby"]
+	path = crates/dobby-sys/Dobby
+	url = git@github.com:jmpews/Dobby.git

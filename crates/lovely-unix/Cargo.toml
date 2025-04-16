@@ -10,4 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 lovely-core = { version ="0.7.1", path = "../lovely-core" }
 
+dobby-rs = "0.1.0"
 ctor = "0.2.7"
