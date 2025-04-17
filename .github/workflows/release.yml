@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
         # Yes, this is the lazy way of doing it. Am I lazy? Yes.
       - name: Create draft release
@@ -46,6 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@nightly
@@ -78,6 +82,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@nightly
@@ -120,11 +126,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
           target: ${{ matrix.target }}
+
+      - name: install gcc 14
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 10
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 10
 
       - name: Build
         run: cargo build --target ${{ matrix.target }} --package lovely-unix --release
