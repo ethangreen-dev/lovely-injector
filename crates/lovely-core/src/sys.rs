@@ -2,12 +2,12 @@ use std::{
     collections::VecDeque,
     ffi::{c_void, CString},
     ptr, slice,
+    sync::LazyLock,
 };
 
 use itertools::Itertools;
 use libloading::{Library, Symbol};
 use log::info;
-use once_cell::sync::Lazy;
 
 pub const LUA_GLOBALSINDEX: isize = -10002;
 
@@ -17,61 +17,64 @@ pub const LUA_TBOOLEAN: isize = 1;
 pub type LuaState = c_void;
 
 #[cfg(target_os = "windows")]
-pub static LUA_LIB: Lazy<Library> = Lazy::new(|| unsafe { Library::new("lua51.dll").unwrap() });
+pub static LUA_LIB: LazyLock<Library> =
+    LazyLock::new(|| unsafe { Library::new("lua51.dll").unwrap() });
 
 #[cfg(target_os = "macos")]
-pub static LUA_LIB: Lazy<Library> =
-    Lazy::new(|| unsafe { Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap() });
+pub static LUA_LIB: LazyLock<Library> = LazyLock::new(|| unsafe {
+    Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
+});
 
-pub static lua_call: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_call").unwrap() });
+pub static lua_call: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize)>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_call").unwrap() });
 
 #[cfg(target_os = "linux")]
-pub static LUA_LIB: Lazy<Library> =
-    Lazy::new(|| unsafe { Library::new("libluajit-5.1.so.2").unwrap() });
+pub static LUA_LIB: LazyLock<Library> =
+    LazyLock::new(|| unsafe { Library::new("libluajit-5.1.so.2").unwrap() });
 
-pub static lua_pcall: Lazy<
+pub static lua_pcall: LazyLock<
     Symbol<unsafe extern "C" fn(*mut LuaState, isize, isize, isize) -> isize>,
-> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pcall").unwrap() });
+> = LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_pcall").unwrap() });
 
-pub static lua_getfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_getfield").unwrap() });
+pub static lua_getfield: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_getfield").unwrap() });
 
-pub static lua_setfield: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_setfield").unwrap() });
+pub static lua_setfield: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize, *const char)>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_setfield").unwrap() });
 
-pub static lua_gettop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState) -> isize>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_gettop").unwrap() });
+pub static lua_gettop: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState) -> isize>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_gettop").unwrap() });
 
-pub static lua_settop: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_settop").unwrap() });
+pub static lua_settop: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_settop").unwrap() });
 
-pub static lua_pushvalue: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize)>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pushvalue").unwrap() });
+pub static lua_pushvalue: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize)>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_pushvalue").unwrap() });
 
-pub static lua_pushcclosure: Lazy<
+pub static lua_pushcclosure: LazyLock<
     Symbol<unsafe extern "C" fn(*mut LuaState, *const c_void, isize)>,
-> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_pushcclosure").unwrap() });
+> = LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_pushcclosure").unwrap() });
 
-pub static lua_tolstring: Lazy<
+pub static lua_tolstring: LazyLock<
     Symbol<unsafe extern "C" fn(*mut LuaState, isize, *mut isize) -> *const char>,
-> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_tolstring").unwrap() });
+> = LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_tolstring").unwrap() });
 
-pub static lua_toboolean: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> bool>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_toboolean").unwrap() });
+pub static lua_toboolean: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> bool>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_toboolean").unwrap() });
 
-pub static lua_topointer: Lazy<
+pub static lua_topointer: LazyLock<
     Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const c_void>,
-> = Lazy::new(|| unsafe { LUA_LIB.get(b"lua_topointer").unwrap() });
+> = LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_topointer").unwrap() });
 
-pub static lua_type: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_type").unwrap() });
+pub static lua_type: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_type").unwrap() });
 
-pub static lua_typename: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const char>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_typename").unwrap() });
+pub static lua_typename: LazyLock<
+    Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> *const char>,
+> = LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_typename").unwrap() });
 
-pub static lua_isstring: Lazy<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
-    Lazy::new(|| unsafe { LUA_LIB.get(b"lua_isstring").unwrap() });
+pub static lua_isstring: LazyLock<Symbol<unsafe extern "C" fn(*mut LuaState, isize) -> isize>> =
+    LazyLock::new(|| unsafe { LUA_LIB.get(b"lua_isstring").unwrap() });
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety

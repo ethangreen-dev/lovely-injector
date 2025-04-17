@@ -418,7 +418,6 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "once_cell",
  "regex-cursor",
  "regex-lite",
  "serde",
@@ -436,7 +435,6 @@ dependencies = [
  "ctor",
  "dobby-rs",
  "lovely-core",
- "once_cell",
 ]
 
 [[package]]
@@ -447,7 +445,6 @@ dependencies = [
  "itertools",
  "libc",
  "lovely-core",
- "once_cell",
  "retour",
  "widestring",
  "windows",

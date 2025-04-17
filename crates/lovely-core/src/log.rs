@@ -1,7 +1,7 @@
-use std::sync::RwLock;
 use std::path::Path;
 use std::io::Write;
 use std::fs::{self, File};
+use std::sync::{OnceLock, RwLock};
 
 use chrono::Local;
 
@@ -9,9 +9,8 @@ use chrono::Local;
 pub use log::{info, error, warn, debug, trace, LevelFilter};
 
 use log::{Level, Log, Metadata, Record, SetLoggerError};
-use once_cell::sync::OnceCell;
 
-static LOGGER: OnceCell<LovelyLogger> = OnceCell::new();
+static LOGGER: OnceLock<LovelyLogger> = OnceLock::new();
 
 struct LovelyLogger {
     use_console: bool,

@@ -1,15 +1,14 @@
 use lovely_core::log::*;
 use lovely_core::sys::{LuaState, LUA_LIB};
-use std::{env, ffi::c_void, mem, panic};
+use std::{env, ffi::c_void, mem, panic, sync::{LazyLock, OnceLock}};
 
 use lovely_core::Lovely;
-use once_cell::sync::{Lazy, OnceCell};
 
-static RUNTIME: OnceCell<Lovely> = OnceCell::new();
+static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
-static RECALL: Lazy<
+static RECALL: LazyLock<
     unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32,
-> = Lazy::new(|| unsafe {
+> = LazyLock::new(|| unsafe {
     let lua_loadbufferx: unsafe extern "C" fn(
         *mut LuaState,
         *const u8,
@@ -33,7 +32,7 @@ unsafe extern "C" fn luaL_loadbuffer(
     size: isize,
     name_ptr: *const u8,
 ) -> u32 {
-    let rt = RUNTIME.get_unchecked();
+    let rt = RUNTIME.get().unwrap_unchecked();
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, std::ptr::null())
 }
 
@@ -44,7 +43,7 @@ unsafe extern "C" fn lua_loadbufferx_detour(
     name_ptr: *const u8,
     mode_ptr: *const u8,
 ) -> u32 {
-    let rt = RUNTIME.get_unchecked();
+    let rt = RUNTIME.get().unwrap_unchecked();
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr)
 }
 
