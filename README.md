@@ -11,6 +11,7 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 3. Put one or more mods into the mod directory (NOT the same as the game directory). If you are modding Balatro, this should be
 * `%AppData%/Balatro/Mods` on Windows
 * [`~/.steam/steam/steamapps/compatdata/2379780/pfx/drive_c/users/steamuser/AppData/Roaming/Balatro`](https://steamcommunity.com/sharedfiles/filedetails/?id=3178949415) on Steam Deck (`~/` will be called *Home* if you are moving files in the GUI file manager)
+* Flatpak version of Steam: `~/.var/app/com.valvesoftware.Steam/.steam/steam/steamapps/compatdata/2379780/pfx/drive_c/users/steamuser/AppData/Roaming/Balatro`
 5. **<ins>Only Steam Deck / Proton / Wine</ins>** Set your game's launch options in Steam to `WINEDLLOVERRIDES="version=n,b" %command%`.
 6. Run the game through Steam.
 
