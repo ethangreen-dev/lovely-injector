@@ -18,7 +18,7 @@ use itertools::Itertools;
 use patch::{pattern, regex, Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
-use sys::LuaState;
+use sys::{LuaLib, LuaState, LUA};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -41,7 +41,9 @@ pub struct Lovely {
 
 impl Lovely {
     /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer, dump_all: bool) -> Self {
+    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> Self {
+        LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
+
         let start = Instant::now();
 
         let args = std::env::args().skip(1).collect_vec();

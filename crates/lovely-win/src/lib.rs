@@ -1,3 +1,5 @@
+mod lualib;
+
 use std::env;
 use std::ffi::c_void;
 use std::panic;
@@ -73,6 +75,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     // Initialize the lovely runtime.
     let rt = Lovely::init(
         &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
+        lualib::get_lualib(),
         dump_all,
     );
     RUNTIME
