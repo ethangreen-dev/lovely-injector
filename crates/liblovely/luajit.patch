@@ -12,7 +12,7 @@ index a44f0272..f2541a5b 100644
  				   const char *name, const char *mode);
  LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
 diff --git a/src/lib_aux.c b/src/lib_aux.c
-index 4b4664a7..c3b91359 100644
+index 4b4664a7..0e58ba7b 100644
 --- a/src/lib_aux.c
 +++ b/src/lib_aux.c
 @@ -22,6 +22,7 @@
@@ -27,7 +27,7 @@ index 4b4664a7..c3b91359 100644
  
  LUALIB_API lua_State *luaL_newstate(void)
  {
-+  lovely_init(lovely_loadbufferx);
++  lovely_init(lovely_loadbufferx, lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_toboolean, lua_topointer, lua_type, lua_typename, lua_isstring);
    lua_State *L = lua_newstate(mem_alloc, NULL);
    if (L) {
      G(L)->panic = panic;
@@ -35,7 +35,7 @@ index 4b4664a7..c3b91359 100644
  
  LUALIB_API lua_State *luaL_newstate(void)
  {
-+  lovely_init(lovely_loadbufferx);
++  lovely_init(lovely_loadbufferx, lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_toboolean, lua_topointer, lua_type, lua_typename, lua_isstring);
    lua_State *L;
  #if LJ_64 && !LJ_GC64
    L = lj_state_newstate(LJ_ALLOCF_INTERNAL, NULL);
@@ -74,14 +74,14 @@ index 24b660a8..daa8ef29 100644
  {
 diff --git a/src/lovely.h b/src/lovely.h
 new file mode 100644
-index 00000000..f850d867
+index 00000000..6fe5e2ec
 --- /dev/null
 +++ b/src/lovely.h
 @@ -0,0 +1,8 @@
 +#ifndef LOVELY_H
 +#define LOVELY_H
 +
-+void lovely_init(void *loadbufferx);
++void lovely_init(void *loadbufferx, void *lua_call, void *lua_pcall, void *lua_getfield, void *lua_setfield, void *lua_gettop, void *lua_settop, void *lua_pushvalue, void *lua_pushcclosure, void *lua_tolstring, void *lua_toboolean, void *lua_topointer, void *lua_type, void *lua_typename, void *lua_isstring);
 +
 +int lovely_apply_patches(lua_State *L, const char *buff, size_t sz,
 +    const char *name, const char *mode);
