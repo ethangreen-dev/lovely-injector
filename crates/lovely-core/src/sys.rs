@@ -48,11 +48,6 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushvalue(state: *mut LuaState, index: isize);
     pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: *const c_void, n: isize);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: isize, len: *mut isize) -> *const c_char;
-    pub unsafe extern "C" fn lua_toboolean(state: *mut LuaState, index: isize) -> bool;
-    pub unsafe extern "C" fn lua_topointer(state: *mut LuaState, index: isize) -> *const c_void;
-    pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: isize) -> isize;
-    pub unsafe extern "C" fn lua_typename(state: *mut LuaState, index: isize) -> *const c_char;
-    pub unsafe extern "C" fn lua_isstring(state: *mut LuaState, index: isize) -> bool;
 });
 
 #[cfg(target_os = "windows")]

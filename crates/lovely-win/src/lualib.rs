@@ -14,10 +14,5 @@ pub unsafe fn get_lualib() -> LuaLib {
         lua_pushvalue: *lua.get(b"lua_pushvalue").unwrap(),
         lua_pushcclosure: *lua.get(b"lua_pushcclosure").unwrap(),
         lua_tolstring: *lua.get(b"lua_tolstring").unwrap(),
-        lua_toboolean: *lua.get(b"lua_toboolean").unwrap(),
-        lua_topointer: *lua.get(b"lua_topointer").unwrap(),
-        lua_type: *lua.get(b"lua_type").unwrap(),
-        lua_typename: *lua.get(b"lua_typename").unwrap(),
-        lua_isstring: *lua.get(b"lua_isstring").unwrap(),
     }
 }
