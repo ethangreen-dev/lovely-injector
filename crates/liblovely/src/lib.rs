@@ -24,11 +24,6 @@ unsafe extern "C" fn lovely_init(
     lua_pushvalue: *const std::ffi::c_void,
     lua_pushcclosure: *const std::ffi::c_void,
     lua_tolstring: *const std::ffi::c_void,
-    lua_toboolean: *const std::ffi::c_void,
-    lua_topointer: *const std::ffi::c_void,
-    lua_type: *const std::ffi::c_void,
-    lua_typename: *const std::ffi::c_void,
-    lua_isstring: *const std::ffi::c_void,
 ) {
     if RUNTIME.get().is_none() {
         panic::set_hook(Box::new(|x| {
@@ -49,11 +44,6 @@ unsafe extern "C" fn lovely_init(
             lua_pushvalue: std::mem::transmute(lua_pushvalue),
             lua_pushcclosure: std::mem::transmute(lua_pushcclosure),
             lua_tolstring: std::mem::transmute(lua_tolstring),
-            lua_toboolean: std::mem::transmute(lua_toboolean),
-            lua_topointer: std::mem::transmute(lua_topointer),
-            lua_type: std::mem::transmute(lua_type),
-            lua_typename: std::mem::transmute(lua_typename),
-            lua_isstring: std::mem::transmute(lua_isstring),
         };
 
         let rt = Lovely::init(
