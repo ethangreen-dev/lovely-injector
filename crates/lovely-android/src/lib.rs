@@ -80,7 +80,7 @@ unsafe extern "C" fn JNI_OnLoad(jvm: JavaVM, _: *mut c_void) -> jint {
     let config = LovelyConfig {
         dump_all: false,
         vanilla: false,
-        mod_dir: Some(external_files_dir.join("files/mods")),
+        mod_dir: Some(external_files_dir.join("mods")),
     };
     
     let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), config);
