@@ -1,5 +1,5 @@
 use std::ptr;
-use std::sync::{LazyLock, OnceLock};
+use std::sync::OnceLock;
 use std::slice;
 use std::ffi::{c_char, c_void, CString};
 use std::collections::VecDeque;
@@ -50,14 +50,24 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: isize, len: *mut isize) -> *const c_char;
 });
 
-#[cfg(target_os = "windows")]
-pub static LUA_LIB: LazyLock<Library> =
-    LazyLock::new(|| unsafe { Library::new("lua51.dll").unwrap() });
-
-#[cfg(target_os = "macos")]
-pub static LUA_LIB: LazyLock<Library> = LazyLock::new(|| unsafe {
-    Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
-});
+impl LuaLib {
+    /// Construct a LuaLib from a loaded library.
+    /// # Safety
+    /// The library must define Lua symbols.
+    pub unsafe fn from_library(library: &Library) -> Self {
+        LuaLib {
+            lua_call: *library.get(b"lua_call").unwrap(),
+            lua_pcall: *library.get(b"lua_pcall").unwrap(),
+            lua_getfield: *library.get(b"lua_getfield").unwrap(),
+            lua_setfield: *library.get(b"lua_setfield").unwrap(),
+            lua_gettop: *library.get(b"lua_gettop").unwrap(),
+            lua_settop: *library.get(b"lua_settop").unwrap(),
+            lua_pushvalue: *library.get(b"lua_pushvalue").unwrap(),
+            lua_pushcclosure: *library.get(b"lua_pushcclosure").unwrap(),
+            lua_tolstring: *library.get(b"lua_tolstring").unwrap(),
+        }
+    }
+}
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
@@ -76,8 +86,8 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, isize, *const u8, *con
 
     // Push the global package.preload table onto the top of the stack, saving its index.
     let stack_top = lua_gettop(state);
-    lua_getfield(state, LUA_GLOBALSINDEX, b"package\0".as_ptr() as _);
-    lua_getfield(state, -1, b"preload\0".as_ptr() as _);
+    lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr() as _);
+    lua_getfield(state, -1, c"preload".as_ptr() as _);
 
     // This is the index of the `package.loaded` table.
     let field_index = lua_gettop(state);
@@ -113,7 +123,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
     for _ in 0..argc {
         // We call Lua's builtin tostring function because we don't have access to the 5.3 luaL_tolstring
         // helper function. It's not pretty, but it works.
-        lua_getfield(state, LUA_GLOBALSINDEX, b"tostring\0".as_ptr() as _);
+        lua_getfield(state, LUA_GLOBALSINDEX, c"tostring".as_ptr() as _);
         lua_pushvalue(state, -2);
         lua_call(state, 1, 1);
 
@@ -124,7 +134,7 @@ pub unsafe extern "C" fn override_print(state: *mut LuaState) -> isize {
         let arg_str = String::from_utf8_lossy(str_buf).to_string();
 
         out.push_front(arg_str);
-        lua_settop(state,  -3);
+        lua_settop(state, -3);
     }
 
     let msg = out.into_iter().join("\t");
@@ -142,5 +152,5 @@ pub unsafe extern "C" fn lua_identity_closure(state: *mut LuaState) -> isize {
     // LUA_GLOBALSINDEX - 1 is where the first upvalue is located
     lua_pushvalue(state, LUA_GLOBALSINDEX - 1);
     // We just return that value
-    return 1;
+    1
 }

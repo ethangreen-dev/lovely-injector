@@ -15,7 +15,7 @@ use log::*;
 use crop::Rope;
 use getargs::{Arg, Options};
 use itertools::Itertools;
-use patch::{pattern, regex, Patch, PatchFile, Priority};
+use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::{LuaLib, LuaState, LUA};
@@ -167,7 +167,7 @@ impl Lovely {
         self.rt_init.call_once(|| {
             let closure = sys::override_print as *const c_void;
             sys::lua_pushcclosure(state, closure, 0);
-            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, b"print\0".as_ptr() as _);
+            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr() as _);
 
             // Inject Lovely functions into the runtime.
             self.patch_table.inject_metadata(state);
@@ -263,7 +263,7 @@ impl PatchTable {
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
-        fn filename_cmp(first: &PathBuf, second: &PathBuf) -> Ordering {
+        fn filename_cmp(first: &Path, second: &Path) -> Ordering {
             let first = first
                 .file_name()
                 .unwrap()
@@ -315,7 +315,7 @@ impl PatchTable {
                         .filter_map(|x| x.ok())
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
-                        .filter(|x| x.extension().unwrap() == "toml")
+                        .filter(|x| x.extension().is_some_and(|x| x == "toml"))
                         .sorted_by(|a, b| filename_cmp(a, b))
                         .collect_vec();
                     toml_files.append(&mut subfiles);
@@ -498,7 +498,7 @@ impl PatchTable {
         // Apply module injection patches.
         let loadbuffer = self.loadbuffer.unwrap();
         for (patch, path) in module_patches {
-            let result = unsafe { patch.apply(target, lua_state, &path, &loadbuffer) };
+            let result = unsafe { patch.apply(target, lua_state, path, &loadbuffer) };
 
             if result {
                 patch_count += 1;

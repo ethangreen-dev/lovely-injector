@@ -1,7 +1,5 @@
 // Modified by Evan Wu.
 
-use std::path::Path;
-
 /*
 fn generate_binding() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
