@@ -381,9 +381,9 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libloading"
-version = "0.8.3"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
+checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
  "windows-targets 0.52.4",
@@ -434,6 +434,7 @@ version = "0.1.0"
 dependencies = [
  "ctor",
  "dobby-rs",
+ "libloading",
  "lovely-core",
 ]
 
@@ -444,6 +445,7 @@ dependencies = [
  "forward-dll",
  "itertools",
  "libc",
+ "libloading",
  "lovely-core",
  "retour",
  "widestring",

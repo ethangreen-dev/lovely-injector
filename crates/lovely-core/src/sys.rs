@@ -1,5 +1,5 @@
 use std::ptr;
-use std::sync::{LazyLock, OnceLock};
+use std::sync::OnceLock;
 use std::slice;
 use std::ffi::{c_char, c_void, CString};
 use std::collections::VecDeque;
@@ -50,14 +50,24 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: isize, len: *mut isize) -> *const c_char;
 });
 
-#[cfg(target_os = "windows")]
-pub static LUA_LIB: LazyLock<Library> =
-    LazyLock::new(|| unsafe { Library::new("lua51.dll").unwrap() });
-
-#[cfg(target_os = "macos")]
-pub static LUA_LIB: LazyLock<Library> = LazyLock::new(|| unsafe {
-    Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap()
-});
+impl LuaLib {
+    /// Construct a LuaLib from a loaded library.
+    /// # Safety
+    /// The library must define Lua symbols.
+    pub unsafe fn from_library(library: &Library) -> Self {
+        LuaLib {
+            lua_call: *library.get(b"lua_call").unwrap(),
+            lua_pcall: *library.get(b"lua_pcall").unwrap(),
+            lua_getfield: *library.get(b"lua_getfield").unwrap(),
+            lua_setfield: *library.get(b"lua_setfield").unwrap(),
+            lua_gettop: *library.get(b"lua_gettop").unwrap(),
+            lua_settop: *library.get(b"lua_settop").unwrap(),
+            lua_pushvalue: *library.get(b"lua_pushvalue").unwrap(),
+            lua_pushcclosure: *library.get(b"lua_pushcclosure").unwrap(),
+            lua_tolstring: *library.get(b"lua_tolstring").unwrap(),
+        }
+    }
+}
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
