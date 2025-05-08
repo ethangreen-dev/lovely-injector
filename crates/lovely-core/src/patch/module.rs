@@ -58,8 +58,8 @@ impl ModulePatch {
 
         // Push the global package.preload table onto the top of the stack, saving its index.
         let stack_top = sys::lua_gettop(state);
-        sys::lua_getfield(state, sys::LUA_GLOBALSINDEX, b"package\0".as_ptr() as _);
-        sys::lua_getfield(state, -1, b"preload\0".as_ptr() as _);
+        sys::lua_getfield(state, sys::LUA_GLOBALSINDEX, c"package".as_ptr() as _);
+        sys::lua_getfield(state, -1, c"preload".as_ptr() as _);
 
         // This is the index of the `package.preload` table.
         let field_index = sys::lua_gettop(state);
