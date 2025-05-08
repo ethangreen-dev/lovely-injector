@@ -3,8 +3,7 @@
 use core::slice;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::ffi::{CStr, CString};
-use std::os::raw::c_void;
+use std::ffi::CStr;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 use std::time::Instant;
@@ -28,7 +27,7 @@ pub mod sys;
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 type LoadBuffer =
-    dyn Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+    dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 pub struct Lovely {
     pub mod_dir: PathBuf,
@@ -159,15 +158,14 @@ impl Lovely {
         &self,
         state: *mut LuaState,
         buf_ptr: *const u8,
-        size: isize,
+        size: usize,
         name_ptr: *const u8,
         mode_ptr: *const u8,
     ) -> u32 {
         // Install native function overrides.
         self.rt_init.call_once(|| {
-            let closure = sys::override_print as *const c_void;
-            sys::lua_pushcclosure(state, closure, 0);
-            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr() as _);
+            sys::lua_pushcclosure(state, sys::override_print, 0);
+            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr());
 
             // Inject Lovely functions into the runtime.
             self.patch_table.inject_metadata(state);
@@ -188,15 +186,10 @@ impl Lovely {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
-        // Prepare buffer for patching (Check and remove the last byte if it is a null terminator)
-        let last_byte = *buf_ptr.offset(size - 1);
-        let actual_size = if last_byte == 0 { size - 1 } else { size };
-
-        // Convert the buffer from cstr ptr, to byte slice, to utf8 str.
-        let buf = slice::from_raw_parts(buf_ptr, actual_size as _);
-        let buf_str = CString::new(buf)
-            .unwrap_or_else(|e| panic!("The byte buffer '{buf:?}' for target {name} contains a non-terminating null char: {e:?}"));
-        let buf_str = buf_str.to_str().unwrap_or_else(|e| {
+        // Prepare buffer for patching
+        // Convert the buffer from [u8] to utf8 str.
+        let buf = slice::from_raw_parts(buf_ptr, size);
+        let buf_str = str::from_utf8(buf).unwrap_or_else(|e| {
             panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}")
         });
 
@@ -238,11 +231,7 @@ impl Lovely {
             };
         }
 
-        let raw = CString::new(patched).unwrap();
-        let raw_size = raw.as_bytes().len();
-        let raw_ptr = raw.into_raw();
-
-        (self.loadbuffer)(state, raw_ptr as _, raw_size as _, name_ptr, mode_ptr)
+        (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
     }
 }
 
