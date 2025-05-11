@@ -37,6 +37,9 @@ pub struct Lovely {
     loadbuffer: &'static LoadBuffer,
     patch_table: PatchTable,
     dump_all: bool,
+    // Previously seen *LuaState pointers.
+    // Note: can have false negatives. A new LuaState that happens to land in the
+    // same memory location as another one won't be detected. We currently ignore this.
     seen_states: Arc<Mutex<HashSet<usize>>>,
 }
 
