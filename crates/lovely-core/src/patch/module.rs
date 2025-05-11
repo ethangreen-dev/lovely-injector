@@ -38,7 +38,7 @@ impl ModulePatch {
         lual_loadbufferx: &F,
     ) -> bool {
         if self.load_now && self.before.is_none() {
-            panic!("Module patch has \"load_now\" set to true, but does not have required paramater \"before\" set");
+            panic!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required paramater \"before\" set", path.display(), self.name);
         }
         // Stop if we're not at the correct insertion point.
         if self.load_now && self.before.clone().unwrap() != file_name {
