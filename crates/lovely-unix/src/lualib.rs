@@ -8,7 +8,7 @@ pub static LUA_LIBRARY: LazyLock<Library> = LazyLock::new(|| unsafe {
     #[cfg(target_os = "macos")]
     return Library::new("../Frameworks/Lua.framework/Versions/A/Lua").unwrap();
     #[cfg(target_os = "linux")]
-    return Library::new("liblua5.1.so").unwrap();
+    return Library::new("libluajit-5.1.so.2").unwrap();
 });
 
 pub unsafe fn get_lualib() -> LuaLib {
