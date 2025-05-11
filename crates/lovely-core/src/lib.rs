@@ -19,6 +19,8 @@ use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::{LuaLib, LuaState, LUA};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -35,8 +37,8 @@ pub struct Lovely {
     pub is_vanilla: bool,
     loadbuffer: &'static LoadBuffer,
     patch_table: PatchTable,
-    rt_init: Once,
     dump_all: bool,
+    seen_states: Arc<Mutex<HashSet<usize>>>,
 }
 
 impl Lovely {
@@ -98,8 +100,8 @@ impl Lovely {
                 is_vanilla,
                 loadbuffer,
                 patch_table: Default::default(),
-                rt_init: Once::new(),
                 dump_all,
+                seen_states: Arc::new(Mutex::new(HashSet::new())),
             };
         }
 
@@ -144,8 +146,8 @@ impl Lovely {
             is_vanilla,
             loadbuffer,
             patch_table,
-            rt_init: Once::new(),
             dump_all,
+            seen_states: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -164,15 +166,19 @@ impl Lovely {
         mode_ptr: *const u8,
     ) -> u32 {
         // Install native function overrides.
-        self.rt_init.call_once(|| {
-            let closure = sys::override_print as *const c_void;
-            sys::lua_pushcclosure(state, closure, 0);
-            sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr() as _);
+        {
+            let states_mutex = Arc::clone(&self.seen_states);
+            let mut states = states_mutex.lock().unwrap();
+            if !states.contains(&(state as usize)) {
+                states.insert(state as usize);
+                let closure = sys::override_print as *const c_void;
+                sys::lua_pushcclosure(state, closure, 0);
+                sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr() as _);
 
-            // Inject Lovely functions into the runtime.
-            self.patch_table.inject_metadata(state);
-        });
-
+                // Inject Lovely functions into the runtime.
+                self.patch_table.inject_metadata(state);
+            }
+        }
         let name = match CStr::from_ptr(name_ptr as _).to_str() {
             Ok(x) => x,
             Err(e) => {
