@@ -15,6 +15,10 @@ pub struct PatternPatch {
     // need to be considered.
     pub pattern: String,
 
+    // An optional set of strings to check if the pattern is surrounded by
+    // Useful for if you want to apply a patch to only one of many repetitions of the same pattern.
+    pub surrounding: Option<Surrounding>,
+
     // The position to insert the target at. `PatternAt::At` replaces the matched line entirely.
     pub position: InsertPosition,
     pub target: String,
@@ -27,6 +31,12 @@ pub struct PatternPatch {
     /// We keep this field around for legacy compat. It doesn't do anything (and never has).
     #[serde(default)]
     pub overwrite: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Surrounding {
+    pub before: String,
+    pub after: String,
 }
 
 impl PatternPatch {
@@ -62,18 +72,43 @@ impl PatternPatch {
                 .zip(wm_lines.iter())
                 .all(|(source, target)| target.matches(source.trim()))
             {
-                if self.match_indent {
-                    let leading_indent = String::from_utf8(
-                        rope_window[0]
-                            .bytes()
-                            .take_while(|x| *x == b' ' || *x == b'\t')
-                            .collect_vec(),
-                    )
-                    .unwrap();
-                    matches.push((line_index, leading_indent));
-                } else {
-                    matches.push((line_index, String::new()));
+                let mut valid = true;
+                if let Some(surrounding) = &self.surrounding {
+                    if line_index > 0 {
+                        let before_line = &rope_lines[line_index - 1];
+                        if before_line.trim() != surrounding.before.trim() {
+                            valid = false;
+                        }
+                    } else {
+                        valid = false
+                    }
+
+                    if line_index + wm_lines_len < rope_lines.len() {
+                        let after_line = &rope_lines[line_index + wm_lines_len];
+                        if after_line.trim() != surrounding.after.trim() {
+                            valid = false;
+                        }
+                    } else {
+                        valid = false;
+                    }
                 }
+
+                if valid {
+                    if self.match_indent {
+                        let leading_indent = String::from_utf8(
+                            rope_window[0]
+                                .bytes()
+                                .take_while(|x| *x == b' ' || *x == b'\t')
+                                .collect_vec(),
+                        )
+                        .unwrap();
+
+                        matches.push((line_index, leading_indent));
+                    } else {
+                        matches.push((line_index, String::new()));
+                    }
+                }
+
                 line_index += wm_lines.len();
             } else {
                 line_index += 1;
