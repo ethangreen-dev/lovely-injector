@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModulePatch {
     pub source: PathBuf,
-    pub before: String,
+    // Only has meaning if `load_now` is true. Evaluate the module immediately before
+    // this file.
+    #[serde(default)]
+    pub before: Option<String>,
     pub name: String,
 
     // If enabled, evaluate the module immediately upon loading it
@@ -36,8 +39,11 @@ impl ModulePatch {
         path: &Path,
         lual_loadbufferx: &F,
     ) -> bool {
+        if self.load_now && self.before.is_none() {
+            panic!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required parameter \"before\" set", path.display(), self.name);
+        }
         // Stop if we're not at the correct insertion point.
-        if self.before != file_name {
+        if self.load_now && self.before.as_ref().unwrap() != file_name {
             return false;
         }
 

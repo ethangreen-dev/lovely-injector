@@ -179,6 +179,25 @@ impl Lovely {
 
                 // Inject Lovely functions into the runtime.
                 self.patch_table.inject_metadata(state);
+
+                // Inject mod modules into runtime
+                let module_patches = self
+                    .patch_table
+                    .patches
+                    .iter()
+                    .filter_map(|(x, prio, path)| match x {
+                        Patch::Module(patch) => Some((patch, prio, path)),
+                        _ => None,
+                    })
+                    .filter(|(x, _, _)| !x.load_now)
+                    .sorted_by_key(|(_, &prio, _)| prio)
+                    .map(|(x, _, path)| (x, path));
+
+                let loadbuffer = self.patch_table.loadbuffer.unwrap();
+
+                for (patch, path) in module_patches {
+                    unsafe { patch.apply("", state, path, &loadbuffer) };
+                }
             }
         }
         let name = match CStr::from_ptr(name_ptr as _).to_str() {
@@ -392,7 +411,7 @@ impl PatchTable {
                             .into_string()
                             .unwrap_or_default();
                         x.source = mod_dir.join(&x.source);
-                        targets.insert(x.before.clone());
+                        targets.insert(x.before.clone().unwrap_or_default());
                     }
                     Patch::Pattern(x) => {
                         targets.insert(x.target.clone());
@@ -474,6 +493,7 @@ impl PatchTable {
                 Patch::Module(patch) => Some((patch, prio, path)),
                 _ => None,
             })
+            .filter(|(x, _, _)| x.load_now)
             .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
 
