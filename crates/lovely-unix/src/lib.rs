@@ -10,12 +10,12 @@ use lovely_core::Lovely;
 static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 static RECALL: LazyLock<
-    unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32,
+    unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32,
 > = LazyLock::new(|| unsafe {
     let lua_loadbufferx: unsafe extern "C" fn(
         *mut LuaState,
         *const u8,
-        isize,
+        usize,
         *const u8,
         *const u8,
     ) -> u32 = *LUA_LIBRARY.get(b"luaL_loadbufferx").unwrap();
@@ -32,7 +32,7 @@ static RECALL: LazyLock<
 unsafe extern "C" fn luaL_loadbuffer(
     state: *mut LuaState,
     buf_ptr: *const u8,
-    size: isize,
+    size: usize,
     name_ptr: *const u8,
 ) -> u32 {
     let rt = RUNTIME.get().unwrap_unchecked();
@@ -42,7 +42,7 @@ unsafe extern "C" fn luaL_loadbuffer(
 unsafe extern "C" fn lua_loadbufferx_detour(
     state: *mut LuaState,
     buf_ptr: *const u8,
-    size: isize,
+    size: usize,
     name_ptr: *const u8,
     mode_ptr: *const u8,
 ) -> u32 {

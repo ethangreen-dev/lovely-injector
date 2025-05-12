@@ -1,5 +1,5 @@
 use std::{
-    ffi::{c_void, CString},
+    ffi::CString,
     fs,
     path::{Path, PathBuf},
     ptr,
@@ -32,7 +32,7 @@ impl ModulePatch {
     /// # Safety
     /// This function is unsafe as it interfaces directly with a series of dynamically loaded
     /// native lua functions.
-    pub unsafe fn apply<F: Fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32>(
+    pub unsafe fn apply<F: Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32>(
         &self,
         file_name: &str,
         state: *mut LuaState,
@@ -47,17 +47,15 @@ impl ModulePatch {
             return false;
         }
 
-        // Read the source file in, converting it to a CString and computing its nulled length.
-        let source = fs::read_to_string(&self.source).unwrap_or_else(|e| {
+        // Read the source file in as [u8]
+        let source = fs::read(&self.source).unwrap_or_else(|e| {
             panic!(
                 "Failed to read module source file for module patch from {} at {:?}: {e:?}",
                 path.display(),
                 &self.source
             )
         });
-
-        let buf_cstr = CString::new(source.as_str()).unwrap();
-        let buf_len = buf_cstr.as_bytes().len();
+        let source_len = source.len();
 
         let name = format!("=[lovely {} \"{}\"]", &self.name, &self.display_source);
         let name_cstr = CString::new(name).unwrap();
@@ -73,8 +71,8 @@ impl ModulePatch {
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
         let return_code = lual_loadbufferx(
             state,
-            buf_cstr.into_raw() as _,
-            buf_len as _,
+            source.as_ptr(),
+            source_len,
             name_cstr.into_raw() as _,
             ptr::null(),
         );
@@ -102,7 +100,7 @@ impl ModulePatch {
                 return false;
             }
             // Wrap this in the identity closure function
-            sys::lua_pushcclosure(state, lua_identity_closure as *const c_void, 1);
+            sys::lua_pushcclosure(state, lua_identity_closure, 1);
         }
 
         // Insert results onto the package.preload global table.
