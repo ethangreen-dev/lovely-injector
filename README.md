@@ -24,7 +24,7 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 5. It will then as for your password or fingerprint to allow the app to run. Enter your password or use your fingerprint.
 6. Re-click on `BalatroLovely.app` to run the modded game.
 
-Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `BalatroLovely.app` app bundle.
+Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `BalatroLovely.app` app bundle. You are able to add this app bundle to your Steam library as a non-Steam game, and run it from there.
 
 **Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 
