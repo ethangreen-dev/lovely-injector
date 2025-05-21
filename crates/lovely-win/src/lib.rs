@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MESSAGEBOX_STYLE};
 static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 static_detour! {
-    pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8,*const u8) -> u32;
+    pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8,*const u8) -> u32;
 }
 
 static WIN_TITLE: LazyLock<U16CString> =
@@ -31,7 +31,7 @@ static WIN_TITLE: LazyLock<U16CString> =
 unsafe extern "C" fn lua_loadbufferx_detour(
     state: *mut LuaState,
     buf_ptr: *const u8,
-    size: isize,
+    size: usize,
     name_ptr: *const u8,
     mode_ptr: *const u8,
 ) -> u32 {
@@ -87,7 +87,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     let proc = GetProcAddress(handle, s!("luaL_loadbufferx")).unwrap();
     let fn_target = std::mem::transmute::<
         _,
-        unsafe extern "C" fn(*mut c_void, *const u8, isize, *const u8, *const u8) -> u32,
+        unsafe extern "C" fn(*mut c_void, *const u8, usize, *const u8, *const u8) -> u32,
     >(proc);
 
     LuaLoadbufferx_Detour
