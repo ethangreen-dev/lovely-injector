@@ -70,13 +70,13 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         SetConsoleTitleW(PCWSTR(WIN_TITLE.as_ptr())).expect("Failed to set console title.");
     }
 
-    let dump_all = args.contains(&"--dump-all".to_string());
+    let config = Lovely::parse_args(&args);
 
     // Initialize the lovely runtime.
     let rt = Lovely::init(
         &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
         lualib::get_lualib(),
-        dump_all,
+        config,
     );
     RUNTIME
         .set(rt)
