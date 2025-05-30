@@ -57,9 +57,9 @@ unsafe fn construct() {
         error!("{message}");
     }));
     let args: Vec<_> = env::args().collect();
-    let dump_all = args.contains(&"--dump-all".to_string());
+    let config = Lovely::parse_args(&args);
 
-    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), lualib::get_lualib(), dump_all);
+    let rt = Lovely::init(&|a, b, c, d, e| RECALL(a, b, c, d, e), lualib::get_lualib(), config);
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));
