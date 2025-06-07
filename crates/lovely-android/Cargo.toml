@@ -1,0 +1,16 @@
+[package]
+name = "lovely-android"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "lovely"
+crate-type = ["cdylib"]
+
+[dependencies]
+lovely-core = { version ="0.7.1", path = "../lovely-core" }
+
+dobby-rs = "0.1.0"
+ctor = "0.2.7"
+jni = "0.21.1"
+libloading = "0.8.6"
