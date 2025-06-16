@@ -1,6 +1,6 @@
 mod lualib;
 
-use lovely_core::{log::*, LovelyConfig};
+use lovely_core::{log::*, config};
 use lovely_core::sys::LuaState;
 use lualib::LUA_LIBRARY;
 use std::path::PathBuf;
@@ -80,7 +80,7 @@ unsafe extern "C" fn JNI_OnLoad(jvm: JavaVM, _: *mut c_void) -> jint {
 
     let mut env = jvm.get_env().unwrap();
     let external_files_dir = get_external_files_dir(&mut env).expect("Failed to get external files directory.");
-    let config = LovelyConfig {
+    let config = config::LovelyConfig {
         dump_all: false,
         vanilla: false,
         mod_dir: Some(external_files_dir.join("mods")),

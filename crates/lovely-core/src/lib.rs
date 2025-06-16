@@ -20,10 +20,13 @@ use sys::{LuaLib, LuaState, LUA};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use config::LovelyConfig;
+
 pub mod chunk_vec_cursor;
 pub mod log;
 pub mod patch;
 pub mod sys;
+pub mod config;
 
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -40,12 +43,6 @@ pub struct Lovely {
     // Note: can have false negatives. A new LuaState that happens to land in the
     // same memory location as another one won't be detected. We currently ignore this.
     seen_states: Arc<Mutex<HashSet<usize>>>,
-}
-
-pub struct LovelyConfig {
-    pub dump_all: bool,
-    pub vanilla: bool,
-    pub mod_dir: Option<PathBuf>,
 }
 
 impl Lovely {
@@ -259,28 +256,6 @@ impl Lovely {
         }
 
         (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
-    }
-
-    pub fn parse_args(args: &[String]) -> LovelyConfig {
-        let mut config = LovelyConfig {
-            dump_all: false,
-            vanilla: false,
-            mod_dir: None,
-        };
-        
-        let mut opts = Options::new(args.iter().skip(1).map(String::as_str));
-        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
-            match opt {
-                Arg::Long("mod-dir") => {
-                    config.mod_dir = opts.value().map(PathBuf::from).ok()
-                }
-                Arg::Long("vanilla") => config.vanilla = true,
-                Arg::Long("--dump-all") => config.dump_all = true,
-                _ => (),
-            }
-        };
-
-        config
     }
 }
 
