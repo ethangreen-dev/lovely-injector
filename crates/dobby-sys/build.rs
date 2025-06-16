@@ -1,12 +1,11 @@
 
 fn main() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let android = target_os == "android";
     let mut binding = cmake::Config::new("dobby");
     let build = binding
         .define("CMAKE_OSX_DEPLOYMENT_TARGET", "11.0");
         
-    if android {
+    if target_os == "android" {
         build
             .define("CMAKE_ANDROID_NDK", std::env::var("ANDROID_NDK_HOME").unwrap())
             .define("ANDROID_USE_LEGACY_TOOLCHAIN_FILE", "OFF");
