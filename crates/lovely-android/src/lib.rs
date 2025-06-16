@@ -56,17 +56,18 @@ unsafe extern "C" fn luaL_loadbuffer(
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, std::ptr::null())
 }
 
-unsafe fn get_external_files_dir(env: &mut JNIEnv) -> PathBuf {
-    let activity_thread_class = env.find_class("android/app/ActivityThread").unwrap();
-    let context_class = env.find_class("android/content/Context").unwrap();
-    let external_files_dir_method = env.get_method_id(context_class, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;").unwrap();
+unsafe fn get_external_files_dir(env: &mut JNIEnv) -> Result<PathBuf, jni::errors::Error> {
+    let activity_thread_class = env.find_class("android/app/ActivityThread")?;
+    let context_class = env.find_class("android/content/Context")?;
+    let external_files_dir_method = env.get_method_id(context_class, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;")?;
 
-    let activity_thread = env.call_static_method(activity_thread_class, "currentActivityThread", "()Landroid/app/ActivityThread;", &[]).unwrap().l().unwrap();
-    let context = env.call_method(activity_thread, "getApplication", "()Landroid/app/Application;", &[]).unwrap().l().unwrap();
-    let external_files_dir = env.call_method_unchecked(context, external_files_dir_method, jni::signature::ReturnType::Object, &[jvalue{l: std::ptr::null_mut()}]).unwrap().l().unwrap();
-    let external_files_dir_string: JString = env.call_method(external_files_dir, "getAbsolutePath", "()Ljava/lang/String;", &[]).unwrap().l().unwrap().into();
-    let utf8 = env.get_string(&external_files_dir_string).unwrap();
-    PathBuf::from(utf8.to_str().unwrap())
+    let activity_thread = env.call_static_method(activity_thread_class, "currentActivityThread", "()Landroid/app/ActivityThread;", &[])?.l()?;
+    let context = env.call_method(activity_thread, "getApplication", "()Landroid/app/Application;", &[])?.l()?;
+    let external_files_dir = env.call_method_unchecked(context, external_files_dir_method, jni::signature::ReturnType::Object, &[jvalue{l: std::ptr::null_mut()}])?.l()?;
+    let external_files_dir_string: JString = env.call_method(external_files_dir, "getAbsolutePath", "()Ljava/lang/String;", &[])?.l()?.into();
+    let utf8 = env.get_string(&external_files_dir_string)?;
+    
+    Ok(PathBuf::from(utf8.to_str().unwrap()))
 }
 
 #[allow(non_snake_case)]
@@ -78,7 +79,7 @@ unsafe extern "C" fn JNI_OnLoad(jvm: JavaVM, _: *mut c_void) -> jint {
     }));
 
     let mut env = jvm.get_env().unwrap();
-    let external_files_dir = get_external_files_dir(&mut env);
+    let external_files_dir = get_external_files_dir(&mut env).expect("Failed to get external files directory.");
     let config = LovelyConfig {
         dump_all: false,
         vanilla: false,
