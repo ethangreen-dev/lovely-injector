@@ -2,3 +2,5 @@
 **.DS_STORE
 .vscode
 version.dll
+# nix output path
+result
