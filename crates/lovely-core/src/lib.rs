@@ -20,10 +20,13 @@ use sys::{LuaLib, LuaState, LUA};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use config::LovelyConfig;
+
 pub mod chunk_vec_cursor;
 pub mod log;
 pub mod patch;
 pub mod sys;
+pub mod config;
 
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -44,7 +47,7 @@ pub struct Lovely {
 
 impl Lovely {
     /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> Self {
+    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, config: LovelyConfig) -> Self {
         LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
 
         let start = Instant::now();
@@ -76,20 +79,8 @@ impl Lovely {
                     .to_string_lossy()
                     .replace(".", "_")
             };
-            dirs::config_dir().unwrap().join(game_name).join("Mods")
+            config.mod_dir.unwrap_or_else(|| dirs::config_dir().unwrap().join(game_name).join("Mods"))
         };
-
-        let mut is_vanilla = false;
-
-        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
-            match opt {
-                Arg::Long("mod-dir") => {
-                    mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir)
-                }
-                Arg::Long("vanilla") => is_vanilla = true,
-                _ => (),
-            }
-        }
 
         let log_dir = mod_dir.join("lovely").join("log");
 
@@ -98,15 +89,15 @@ impl Lovely {
         info!("Lovely {LOVELY_VERSION}");
 
         // Stop here if we're running in vanilla mode.
-        if is_vanilla {
+        if config.vanilla {
             info!("Running in vanilla mode");
 
             return Lovely {
                 mod_dir,
-                is_vanilla,
+                is_vanilla: config.vanilla,
                 loadbuffer,
                 patch_table: Default::default(),
-                dump_all,
+                dump_all: config.dump_all,
                 seen_states: Arc::new(Mutex::new(HashSet::new())),
             };
         }
@@ -149,10 +140,10 @@ impl Lovely {
 
         Lovely {
             mod_dir,
-            is_vanilla,
+            is_vanilla: config.vanilla,
             loadbuffer,
             patch_table,
-            dump_all,
+            dump_all: config.dump_all,
             seen_states: Arc::new(Mutex::new(HashSet::new())),
         }
     }
