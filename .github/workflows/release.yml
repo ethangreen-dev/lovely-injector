@@ -28,7 +28,7 @@ jobs:
           Windows|[lovely-x86_64-pc-windows-msvc.zip](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-pc-windows-msvc.zip)|
           Mac (Arm)|[lovely-aarch64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-aarch64-apple-darwin.tar.gz)|
           Mac (x86)|[lovely-x86_64-apple-darwin.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-apple-darwin.tar.gz)|
-          Linux|[x86_64-unknown-linux-gnu.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/x86_64-unknown-linux-gnu.tar.gz)|
+          Linux|[lovely-x86_64-unknown-linux-gnu.tar.gz](https://github.com/ethangreen-dev/lovely-injector/releases/download/${{ github.ref_name }}/lovely-x86_64-unknown-linux-gnu.tar.gz)|
           EOF
 
           gh release create ${{ github.ref_name }} \
