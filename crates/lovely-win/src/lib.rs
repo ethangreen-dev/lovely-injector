@@ -61,7 +61,11 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     let args = env::args().collect_vec();
 
-    if args.contains(&"--disable-mods".to_string()) || args.contains(&"-d".to_string()) {
+    if args.contains(&"--vanilla".to_string())
+        || args.contains(&"-v".to_string())
+        || args.contains(&"--disable-mods".to_string())
+        || args.contains(&"-d".to_string())
+    {
         return 1;
     }
 
