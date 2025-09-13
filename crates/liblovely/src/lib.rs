@@ -8,7 +8,7 @@ use once_cell::sync::OnceCell;
 static RUNTIME: OnceCell<Lovely> = OnceCell::new();
 
 type LoadBufferX =
-    unsafe extern "C" fn(*mut LuaState, *const u8, isize, *const u8, *const u8) -> u32;
+unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32;
 
 static RECALL: OnceCell<LoadBufferX> = OnceCell::new();
 
@@ -61,7 +61,7 @@ unsafe extern "C" fn lovely_init(
 unsafe extern "C" fn lovely_apply_patches(
     state: *mut LuaState,
     buf_ptr: *const u8,
-    size: isize,
+    size: usize,
     name_ptr: *const u8,
     mode_ptr: *const u8,
 ) -> u32 {
