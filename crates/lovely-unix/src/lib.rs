@@ -12,7 +12,7 @@ use std::{
 
 use lovely_core::Lovely;
 
-static RUNTIME: OnceLock<Lovely> = OnceLock::new();
+static RUNTIME: OnceLock<&Lovely> = OnceLock::new();
 
 type LoadBuffer =
     unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32;
