@@ -33,7 +33,6 @@ type LoadBuffer =
     dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
-    info!("hi mom");
     let result = panic::catch_unwind(|| {
         let lovely = &RUNTIME.get().unwrap();
         let new_table = PatchTable::load(&lovely.mod_dir).with_loadbuffer(lovely.loadbuffer);
