@@ -64,6 +64,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
     pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
     pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
+    pub unsafe extern "C" fn lua_pushboolean(state: *mut LuaState, bool: c_int);
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
     pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
 });
@@ -87,6 +88,7 @@ impl LuaLib {
             lual_register: *library.get(b"luaL_register").unwrap(),
             lua_pushstring: *library.get(b"lua_pushstring").unwrap(),
             lua_pushnumber: *library.get(b"lua_pushnumber").unwrap(),
+            lua_pushboolean: *library.get(b"lua_pushboolean").unwrap(),
             lua_settable: *library.get(b"lua_settable").unwrap(),
             lua_createtable: *library.get(b"lua_createtable").unwrap(),
         }
@@ -134,6 +136,12 @@ impl Pushable for &str {
 impl Pushable for isize {
     unsafe fn push(&self, state: *mut LuaState) {
         lua_pushnumber(state, *self as _);
+    }
+}
+
+impl Pushable for bool {
+    unsafe fn push(&self, state: *mut LuaState) {
+        lua_pushboolean(state, *self as _);
     }
 }
 

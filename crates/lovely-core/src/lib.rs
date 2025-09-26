@@ -3,11 +3,12 @@
 use core::slice;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::ffi::{CStr};
+use std::ffi::{CStr, c_int};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs};
-use std::sync::{RwLock, Arc};
+use std::sync::{RwLock, Arc, OnceLock};
+use std::panic;
 
 use log::*;
 
@@ -17,7 +18,7 @@ use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
-use sys::{LuaLib, LuaState, LuaModule, LUA};
+use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -26,8 +27,37 @@ pub mod sys;
 
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static RUNTIME: OnceLock<Lovely> = OnceLock::new();
+
 type LoadBuffer =
     dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+
+unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
+    info!("hi mom");
+    let result = panic::catch_unwind(|| {
+        let lovely = &RUNTIME.get().unwrap();
+        let new_table = PatchTable::load(&lovely.mod_dir).with_loadbuffer(lovely.loadbuffer);
+        let binding = Arc::clone(&lovely.patch_table);
+        let mut patch_table = binding.write().unwrap();
+        *patch_table = new_table;
+    });
+    let success = result.is_ok();
+    if success {
+        state.push(true);
+        return 1;
+    }
+    let err = result.unwrap_err();
+    let msg = if let Some(s) = err.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = err.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "Unknown panic".to_string()
+    };
+    state.push(false);
+    state.push(msg);
+    2
+}
 
 pub struct Lovely {
     pub mod_dir: PathBuf,
@@ -39,7 +69,9 @@ pub struct Lovely {
 
 impl Lovely {
     /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> Self {
+    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> &'static Self {
+        assert!(RUNTIME.get().is_none());
+
         LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
 
         let start = Instant::now();
@@ -96,13 +128,15 @@ impl Lovely {
         if is_vanilla {
             info!("Running in vanilla mode");
 
-            return Lovely {
+            let lovely = Lovely {
                 mod_dir,
                 is_vanilla,
                 loadbuffer,
                 patch_table: Default::default(),
                 dump_all,
             };
+            RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
+            return RUNTIME.get().unwrap();
         }
 
         // Validate that an older Lovely install doesn't already exist within the game directory.
@@ -141,13 +175,15 @@ impl Lovely {
             start.elapsed().as_millis()
         );
 
-        Lovely {
+        let lovely = Lovely {
             mod_dir,
             is_vanilla,
             loadbuffer,
             patch_table,
             dump_all,
-        }
+        };
+        RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
+        RUNTIME.get().unwrap()
     }
 
     /// Apply patches onto the raw buffer.
@@ -204,16 +240,6 @@ impl Lovely {
                 return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
             }
         };
-
-        if name == "Ligma" {
-            // This code path deadlocks as of now. To prevent this mv the binding and patch_table
-            // def's into the block they are above and copy them below this block. This is just a
-            // hack to get it working
-            info!("hi mom");
-            let binding = Arc::clone(&self.patch_table);
-            let mut patch_table = binding.write().unwrap();
-            *patch_table = PatchTable::load(&self.mod_dir).with_loadbuffer(self.loadbuffer);
-        }
 
         // Stop here if no valid patch exists for this target.
         if !patch_table.needs_patching(name) && !self.dump_all {
@@ -464,6 +490,7 @@ impl PatchTable {
             .add_var("repo", repo)
             .add_var("version", env!("CARGO_PKG_VERSION"))
             .add_var("mod_dir", mod_dir)
+            .add_var("reload_patches", reload_patches as LuaFunc)
             .commit(state, "lovely");
     }
 
