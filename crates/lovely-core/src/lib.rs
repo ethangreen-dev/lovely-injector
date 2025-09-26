@@ -3,7 +3,7 @@
 use core::slice;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::ffi::CStr;
+use std::ffi::{CStr, c_int};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs};
@@ -16,7 +16,7 @@ use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
-use sys::{LuaLib, LuaState, LuaModule, LUA};
+use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -453,7 +453,7 @@ impl PatchTable {
         LuaModule::new()
             .add_var("repo", repo)
             .add_var("version", env!("CARGO_PKG_VERSION"))
-            .add_var("mod_dir", &mod_dir)
+            .add_var("mod_dir", mod_dir)
             .commit(state);
     }
 

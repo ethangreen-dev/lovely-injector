@@ -12,6 +12,7 @@ use log::info;
 pub static LUA: OnceLock<LuaLib> = OnceLock::new();
 
 pub type LuaState = c_void;
+pub type LuaFunc = unsafe extern "C" fn(*mut LuaState) -> c_int;
 
 pub const LUA_GLOBALSINDEX: c_int = -10002;
 pub const LUA_TNIL: c_int = 0;
@@ -47,7 +48,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_gettop(state: *mut LuaState) -> c_int;
     pub unsafe extern "C" fn lua_settop(state: *mut LuaState, index: c_int);
     pub unsafe extern "C" fn lua_pushvalue(state: *mut LuaState, index: c_int);
-    pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: unsafe extern "C" fn(*mut LuaState) -> c_int, n: c_int);
+    pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: LuaFunc, n: c_int);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const c_char;
     pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: c_int) -> c_int;
     pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
@@ -109,24 +110,34 @@ impl Pushable for isize {
     }
 }
 
+impl Pushable for LuaFunc {
+    unsafe fn push(&self, state: *mut LuaState) {
+        lua_pushcclosure(state, *self as _, 0);
+    }
+}
+
 /// A lua FFI entry. Used specifically by lual_register to register
 /// a module and its associated functions into the lua runtime.
 pub struct LuaReg {
     name: String,
-    func: unsafe extern "C" fn(*mut LuaState) -> isize,
+    func: LuaFunc,
 }
 
-pub struct LuaVar<P: Pushable> {
+pub struct LuaVar<P: > 
+where
+    P: std::ops::Deref,
+    P::Target: Pushable,
+{
     name: String,
     val: P,
 }
 
-pub struct LuaModule<P: Pushable> {
+pub struct LuaModule {
     reg: Vec<LuaReg>,
-    var: Vec<LuaVar<P>>,
+    var: Vec<LuaVar<Box<dyn Pushable>>>,
 }
 
-impl<P: Pushable> LuaModule<P> {
+impl LuaModule {
     pub fn new() -> Self {
         LuaModule {
             reg: vec![],
@@ -135,7 +146,7 @@ impl<P: Pushable> LuaModule<P> {
     }
 
     /// Register a native C FFI function to this Lua module.
-    pub fn add_reg(self, name: &'static str, func: unsafe extern "C" fn(*mut LuaState) -> isize) -> Self {
+    pub fn add_reg(self, name: &'static str, func: LuaFunc) -> Self {
         let name = format!("{name}\0");
         let mut reg = self.reg;
         reg.push(LuaReg {
@@ -150,9 +161,10 @@ impl<P: Pushable> LuaModule<P> {
     }
 
     /// Add a variable to this Lua module.
-    pub fn add_var(self, name: &'static str, val: P) -> Self {
+    pub fn add_var<P: Pushable + 'static>(self, name: &'static str, val: P) -> Self {
         let name = format!("{name}\0");
         let mut var = self.var;
+        let val = Box::new(val);
         var.push(LuaVar {
             name,
             val,
