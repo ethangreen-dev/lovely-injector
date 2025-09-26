@@ -7,6 +7,7 @@ use std::ffi::{CStr};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs};
+use std::sync::{RwLock, Arc};
 
 use log::*;
 
@@ -32,7 +33,7 @@ pub struct Lovely {
     pub mod_dir: PathBuf,
     pub is_vanilla: bool,
     loadbuffer: &'static LoadBuffer,
-    patch_table: PatchTable,
+    patch_table: Arc<RwLock<PatchTable>>,
     dump_all: bool,
 }
 
@@ -125,7 +126,7 @@ impl Lovely {
         }
 
         info!("Using mod directory at {mod_dir:?}");
-        let patch_table = PatchTable::load(&mod_dir).with_loadbuffer(loadbuffer);
+        let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir).with_loadbuffer(loadbuffer)));
 
         let dump_dir = mod_dir.join("lovely").join("dump");
         if dump_dir.is_dir() {
@@ -164,6 +165,8 @@ impl Lovely {
         mode_ptr: *const u8,
     ) -> u32 {
         // Install native function overrides.
+        let binding = Arc::clone(&self.patch_table);
+        let patch_table = binding.read().unwrap();
         {
             if !sys::is_module_preloaded(state, "lovely") {
                 let closure = sys::override_print;
@@ -171,22 +174,21 @@ impl Lovely {
                 sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr());
 
                 // Inject Lovely functions into the runtime.
-                self.patch_table.inject_metadata(state);
+                patch_table.inject_metadata(state);
 
                 // Inject mod modules into runtime
-                let module_patches = self
-                    .patch_table
+                let module_patches = patch_table
                     .patches
                     .iter()
                     .filter_map(|(x, prio, path)| match x {
                         Patch::Module(patch) => Some((patch, prio, path)),
                         _ => None,
                     })
-                    .filter(|(x, _, _)| !x.load_now)
+                .filter(|(x, _, _)| !x.load_now)
                     .sorted_by_key(|(_, &prio, _)| prio)
                     .map(|(x, _, path)| (x, path));
 
-                let loadbuffer = self.patch_table.loadbuffer.unwrap();
+                let loadbuffer = patch_table.loadbuffer.unwrap();
 
                 for (patch, path) in module_patches {
                     unsafe { patch.apply("", state, path, &loadbuffer) };
@@ -203,8 +205,18 @@ impl Lovely {
             }
         };
 
+        if name == "Ligma" {
+            // This code path deadlocks as of now. To prevent this mv the binding and patch_table
+            // def's into the block they are above and copy them below this block. This is just a
+            // hack to get it working
+            info!("hi mom");
+            let binding = Arc::clone(&self.patch_table);
+            let mut patch_table = binding.write().unwrap();
+            *patch_table = PatchTable::load(&self.mod_dir).with_loadbuffer(self.loadbuffer);
+        }
+
         // Stop here if no valid patch exists for this target.
-        if !self.patch_table.needs_patching(name) && !self.dump_all {
+        if !patch_table.needs_patching(name) && !self.dump_all {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
@@ -216,7 +228,7 @@ impl Lovely {
         });
 
         // Apply patches onto this buffer.
-        let patched = self.patch_table.apply_patches(name, buf_str, state);
+        let patched = patch_table.apply_patches(name, buf_str, state);
 
         let regex = Regex::new(r#"=\[(\w+)(?: (\w+))? "([^"]+)"\]"#).unwrap();
         let pretty_name = if let Some(capture) = regex.captures(name) {
@@ -292,7 +304,7 @@ impl PatchTable {
             .unwrap_or_else(|e| {
                 panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}")
             })
-            .filter_map(|x| x.ok())
+        .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
             .map(|x| x.path())
             .filter(|x| {
@@ -306,7 +318,7 @@ impl PatchTable {
                 }
                 !ignore_file.is_file()
             })
-            .sorted_by(|a, b| filename_cmp(a, b));
+        .sorted_by(|a, b| filename_cmp(a, b));
 
         let patch_files = mod_dirs
             .flat_map(|dir| {
@@ -323,7 +335,7 @@ impl PatchTable {
                         .unwrap_or_else(|_| {
                             panic!("Failed to read from lovely directory at '{lovely_dir:?}'.")
                         })
-                        .filter_map(|x| x.ok())
+                    .filter_map(|x| x.ok())
                         .map(|x| x.path())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().is_some_and(|x| x == "toml"))
@@ -334,7 +346,7 @@ impl PatchTable {
 
                 toml_files
             })
-            .collect_vec();
+        .collect_vec();
 
         let mut targets: HashSet<String> = HashSet::new();
         let mut patches: Vec<(Patch, Priority, PathBuf)> = Vec::new();
@@ -409,9 +421,9 @@ impl PatchTable {
             let priority = patch_file.manifest.priority;
             patches.extend(
                 patch_file
-                    .patches
-                    .into_iter()
-                    .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
+                .patches
+                .into_iter()
+                .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
             );
             // TODO concerned about var name conflicts
             var_table.extend(patch_file.vars);
@@ -473,7 +485,7 @@ impl PatchTable {
                 Patch::Module(patch) => Some((patch, prio, path)),
                 _ => None,
             })
-            .filter(|(x, _, _)| x.load_now)
+        .filter(|(x, _, _)| x.load_now)
             .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
 
@@ -484,7 +496,7 @@ impl PatchTable {
                 Patch::Copy(patch) => Some((patch, prio, path)),
                 _ => None,
             })
-            .sorted_by_key(|(_, &prio, _)| prio)
+        .sorted_by_key(|(_, &prio, _)| prio)
             .map(|(x, _, path)| (x, path));
 
         let pattern_and_regex = self
