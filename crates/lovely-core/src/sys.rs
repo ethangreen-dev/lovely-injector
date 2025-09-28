@@ -48,6 +48,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushvalue(state: *mut LuaState, index: c_int);
     pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: unsafe extern "C" fn(*mut LuaState) -> c_int, n: c_int);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const c_char;
+    pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: c_int) -> c_int;
 });
 
 impl LuaLib {
@@ -65,6 +66,7 @@ impl LuaLib {
             lua_pushvalue: *library.get(b"lua_pushvalue").unwrap(),
             lua_pushcclosure: *library.get(b"lua_pushcclosure").unwrap(),
             lua_tolstring: *library.get(b"lua_tolstring").unwrap(),
+            lua_type: *library.get(b"lua_type").unwrap(),
         }
     }
 }
@@ -108,6 +110,22 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, usize, *const u8, *con
     }
 
     lua_settop(state, stack_top);
+}
+
+// Checks if a module is in the preload table. Used to check if lovely was already initalized
+// # Safety
+// Uses the native lua API. I'm also pretty sure I it bikes without a helmet.
+pub unsafe fn is_module_preloaded(state: *mut LuaState, name: &str) -> bool {
+    let name_cstr = CString::new(name).unwrap();
+    let stack_top = lua_gettop(state);
+    lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
+    lua_getfield(state, -1, c"preload".as_ptr());
+    lua_getfield(state, -1, name_cstr.as_ptr());
+
+    let res = lua_type(state, -1) != LUA_TNIL;
+
+    lua_settop(state, stack_top);
+    return res;
 }
 
 /// An override print function, copied piecemeal from the Lua 5.1 source, but in Rust.

@@ -17,8 +17,6 @@ use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
 use sys::{LuaLib, LuaState, LUA};
-use std::sync::Arc;
-use std::sync::Mutex;
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -36,10 +34,6 @@ pub struct Lovely {
     loadbuffer: &'static LoadBuffer,
     patch_table: PatchTable,
     dump_all: bool,
-    // Previously seen *LuaState pointers.
-    // Note: can have false negatives. A new LuaState that happens to land in the
-    // same memory location as another one won't be detected. We currently ignore this.
-    seen_states: Arc<Mutex<HashSet<usize>>>,
 }
 
 impl Lovely {
@@ -107,7 +101,6 @@ impl Lovely {
                 loadbuffer,
                 patch_table: Default::default(),
                 dump_all,
-                seen_states: Arc::new(Mutex::new(HashSet::new())),
             };
         }
 
@@ -153,7 +146,6 @@ impl Lovely {
             loadbuffer,
             patch_table,
             dump_all,
-            seen_states: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -173,10 +165,7 @@ impl Lovely {
     ) -> u32 {
         // Install native function overrides.
         {
-            let states_mutex = Arc::clone(&self.seen_states);
-            let mut states = states_mutex.lock().unwrap();
-            if !states.contains(&(state as usize)) {
-                states.insert(state as usize);
+            if !sys::is_module_preloaded(state, "lovely") {
                 let closure = sys::override_print;
                 sys::lua_pushcclosure(state, closure, 0);
                 sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr());
