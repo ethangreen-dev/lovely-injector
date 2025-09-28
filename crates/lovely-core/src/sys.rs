@@ -113,7 +113,7 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, usize, *const u8, *con
 }
 
 // Checks if a module is in the preload table. Used to check if lovely was already initalized
-// # Saftey
+// # Safety
 // Uses the native lua API. I'm also pretty sure I it bikes without a helmet.
 pub unsafe fn is_module_preloaded(state: *mut LuaState, name: &str) -> bool {
     let name_cstr = CString::new(name).unwrap();
