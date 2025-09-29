@@ -195,13 +195,13 @@ impl LuaModule {
             .chain(vec![0 as _, 0 as _])
             .collect();
 
-        // Register the name:func table within the Lua runtime.
-        let reg_ptr = native_reg.as_ptr() as *const c_void;
-        lual_register(state, b"lovely\0".as_ptr() as _, reg_ptr);
-
         // Now we register variables onto the lovely global table.
         let top = lua_gettop(state);
         lua_getfield(state, LUA_GLOBALSINDEX, b"lovely\0".as_ptr() as _);
+
+        // Register the name:func table within the Lua runtime.
+        let reg_ptr = native_reg.as_ptr() as *const c_void;
+        lual_register(state, b"lovely\0".as_ptr() as _, reg_ptr);
 
         for lua_var in self.var.iter() {
             // Push the var name and value onto the stack.
