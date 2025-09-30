@@ -57,10 +57,10 @@ unsafe extern "C" fn lua_loadbufferx_detour(
 
 #[ctor::ctor]
 unsafe fn construct() {
-    panic::set_hook(Box::new(|x| {
-        let message = format!("lovely-injector has crashed: \n{x}");
-        error!("{message}");
-    }));
+    // panic::set_hook(Box::new(|x| {
+    //     let message = format!("lovely-injector has crashed: \n{x}");
+    //     error!("{message}");
+    // }));
 
     let args: Vec<_> = env::args().collect();
 

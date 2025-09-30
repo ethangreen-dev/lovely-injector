@@ -17,6 +17,9 @@ pub type LuaFunc = unsafe extern "C" fn(*mut LuaState) -> c_int;
 pub const LUA_GLOBALSINDEX: c_int = -10002;
 pub const LUA_TNIL: c_int = 0;
 pub const LUA_TBOOLEAN: c_int = 1;
+pub const fn lua_upvalueindex(i: c_int) -> c_int { // This is a macro in lua
+    LUA_GLOBALSINDEX - i
+}
 
 macro_rules! generate {
     ($libname:ident {
@@ -40,6 +43,13 @@ macro_rules! generate {
     };
 }
 
+// TODO: Can we make this work with variable number of upvalues?
+unsafe extern "C" fn lua_return_values(state: *mut LuaState) -> c_int {
+    let index = lua_upvalueindex(1);
+    lua_pushvalue(state, index);
+    1
+}
+
 generate! (LuaLib {
     pub unsafe extern "C" fn lua_call(state: *mut LuaState, nargs: c_int, nresults: c_int);
     pub unsafe extern "C" fn lua_pcall(state: *mut LuaState, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
@@ -55,6 +65,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
     pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
+    pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
 });
 
 impl LuaLib {
@@ -77,10 +88,26 @@ impl LuaLib {
             lua_pushstring: *library.get(b"lua_pushstring").unwrap(),
             lua_pushnumber: *library.get(b"lua_pushnumber").unwrap(),
             lua_settable: *library.get(b"lua_settable").unwrap(),
+            lua_createtable: *library.get(b"lua_createtable").unwrap(),
         }
     }
 }
 
+// TODO: implement all lua methods on this(?)
+pub trait LuaStateTrait {
+    unsafe fn push<P: Pushable>(self, obj: P);
+    unsafe fn push_closure(self, func: LuaFunc, vals: c_int);
+}
+
+impl LuaStateTrait for *mut LuaState {
+    unsafe fn push<P: Pushable>(self, obj: P) {
+        obj.push(self)
+    }
+
+    unsafe fn push_closure(self, func: LuaFunc, vals: c_int) {
+        lua_pushcclosure(self, func, vals);
+    }
+}
 /// A trait which allows the implementing value to generically push its value onto the Lua stack.
 pub trait Pushable {
     /// Push this value onto the Lua stack.
@@ -99,8 +126,8 @@ impl Pushable for String {
 
 impl Pushable for &str {
     unsafe fn push(&self, state: *mut LuaState) {
-        let value = format!("{self}\0");
-        lua_pushstring(state, value.as_ptr() as _);
+        let value = CString::new(*self).unwrap();
+        lua_pushstring(state, value.into_raw() as _);
     }
 }
 
@@ -116,13 +143,6 @@ impl Pushable for LuaFunc {
     }
 }
 
-/// A lua FFI entry. Used specifically by lual_register to register
-/// a module and its associated functions into the lua runtime.
-pub struct LuaReg {
-    name: String,
-    func: LuaFunc,
-}
-
 pub struct LuaVar<P: > 
 where
     P: std::ops::Deref,
@@ -133,30 +153,13 @@ where
 }
 
 pub struct LuaModule {
-    reg: Vec<LuaReg>,
     var: Vec<LuaVar<Box<dyn Pushable>>>,
 }
 
 impl LuaModule {
     pub fn new() -> Self {
         LuaModule {
-            reg: vec![],
             var: vec![],
-        }
-    }
-
-    /// Register a native C FFI function to this Lua module.
-    pub fn add_reg(self, name: &'static str, func: LuaFunc) -> Self {
-        let name = format!("{name}\0");
-        let mut reg = self.reg;
-        reg.push(LuaReg {
-            name,
-            func,
-        });
-
-        Self {
-            reg,
-            var: self.var,
         }
     }
 
@@ -171,7 +174,6 @@ impl LuaModule {
         });
 
         LuaModule {
-            reg: self.reg,
             var,
         }
     }
@@ -180,28 +182,17 @@ impl LuaModule {
     /// 
     /// # Safety
     /// Directly interacts and mutates native Lua state.
-    pub unsafe fn commit(self, state: *mut LuaState) {
-        // Convert self.reg into a raw array of name:func pairs, represented as native c_void pointers.
-        let native_reg: Vec<*const c_void> = self
-            .reg
-            .iter()
-            .map(|reg| {
-                let name = &reg.name;
-                let func = reg.func;
-
-                vec![name.as_ptr() as *const c_void, func as *const c_void]
-            })
-        .flatten()
-            .chain(vec![0 as _, 0 as _])
-            .collect();
-
-        // Now we register variables onto the lovely global table.
+    pub unsafe fn commit(self, state: *mut LuaState, name: &'static str) {
         let top = lua_gettop(state);
-        lua_getfield(state, LUA_GLOBALSINDEX, b"lovely\0".as_ptr() as _);
 
-        // Register the name:func table within the Lua runtime.
-        let reg_ptr = native_reg.as_ptr() as *const c_void;
-        lual_register(state, b"lovely\0".as_ptr() as _, reg_ptr);
+        // Get the package.preloads
+        lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
+        lua_getfield(state, -1, c"preload".as_ptr());
+        let preload_index = lua_gettop(state);
+
+        // Create a table at the top of the stack.
+        lua_createtable(state, 0, self.var.len().try_into().unwrap());
+        let mod_index = lua_gettop(state);
 
         for lua_var in self.var.iter() {
             // Push the var name and value onto the stack.
@@ -211,6 +202,16 @@ impl LuaModule {
             // Set the table key:val from what we previously pushed onto the stack.
             lua_settable(state, -3);
         }
+
+
+        // Push our function to the stack
+        let func: LuaFunc = lua_return_values;
+
+        lua_settop(state, mod_index);
+        state.push_closure(func, 1);
+
+        let name = CString::new(name).unwrap();
+        lua_setfield(state, preload_index, name.into_raw() as _);
 
         // Reset the stack.
         lua_settop(state, top);
