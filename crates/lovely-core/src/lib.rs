@@ -27,7 +27,7 @@ pub mod sys;
 
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static RUNTIME: OnceLock<Lovely> = OnceLock::new();
+pub static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 type LoadBuffer =
     dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
@@ -255,10 +255,11 @@ impl Lovely {
         // Apply patches onto this buffer.
         let patched = patch_table.apply_patches(name, buf_str, state);
 
-        let regex = Regex::new(r#"=\[(\w+)(?: (\w+))? "([^"]+)"\]"#).unwrap();
+        let regex = Regex::new(r#"=\[(\w+)(?: (\S+))? "([^"]+)"\]"#).unwrap();
         let pretty_name = if let Some(capture) = regex.captures(name) {
             let f1 = capture.get(1).map_or("", |x| x.as_str());
-            let f2 = capture.get(2).map_or("", |x| x.as_str());
+            // Replace . in module names because it means /
+            let f2 = capture.get(2).map_or("", |x| x.as_str()).replace(".", "/");
             let f3 = capture.get(3).map_or("", |x| x.as_str());
             format!("{f1}/{f2}/{f3}")
         } else {

@@ -7,6 +7,7 @@ use std::{
 
 use crate::sys::{self, lua_identity_closure, LuaState};
 use serde::{Deserialize, Serialize};
+use crate::RUNTIME;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModulePatch {
@@ -42,6 +43,7 @@ impl ModulePatch {
         if self.load_now && self.before.is_none() {
             panic!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required parameter \"before\" set", path.display(), self.name);
         }
+
         // Stop if we're not at the correct insertion point.
         if self.load_now && self.before.as_ref().unwrap() != file_name {
             return false;
@@ -69,7 +71,10 @@ impl ModulePatch {
         let field_index = sys::lua_gettop(state);
 
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        let return_code = lual_loadbufferx(
+        
+        let lovely = &RUNTIME.get().unwrap();
+
+        let return_code = lovely.apply_buffer_patches(
             state,
             source.as_ptr(),
             source_len,
