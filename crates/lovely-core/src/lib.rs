@@ -204,8 +204,8 @@ impl Lovely {
         let patch_table = binding.read().unwrap();
         {
             if !sys::is_module_preloaded(state, "lovely") {
-                let closure = sys::override_print;
-                sys::lua_pushcclosure(state, closure, 0);
+                let closure: LuaFunc = sys::override_print;
+                state.push(closure);
                 sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr());
 
                 // Inject Lovely functions into the runtime.
