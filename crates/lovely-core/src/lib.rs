@@ -35,7 +35,7 @@ type LoadBuffer =
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
     let result = panic::catch_unwind(|| {
         let lovely = &RUNTIME.get().unwrap();
-        let new_table = PatchTable::load(&lovely.mod_dir).with_loadbuffer(lovely.loadbuffer);
+        let new_table = PatchTable::load(&lovely.mod_dir);
         let binding = Arc::clone(&lovely.patch_table);
         let mut patch_table = binding.write().unwrap();
         *patch_table = new_table;
@@ -159,7 +159,7 @@ impl Lovely {
         }
 
         info!("Using mod directory at {mod_dir:?}");
-        let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir).with_loadbuffer(loadbuffer)));
+        let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir)));
 
         let dump_dir = mod_dir.join("lovely").join("dump");
         if dump_dir.is_dir() {
@@ -223,10 +223,8 @@ impl Lovely {
                     .sorted_by_key(|(_, &prio, _)| prio)
                     .map(|(x, _, path)| (x, path));
 
-                let loadbuffer = patch_table.loadbuffer.unwrap();
-
                 for (patch, path) in module_patches {
-                    unsafe { patch.apply("", state, path, &loadbuffer) };
+                    unsafe { patch.apply("", state, path) };
                 }
             }
         }
@@ -298,7 +296,6 @@ impl Lovely {
 #[derive(Default)]
 pub struct PatchTable {
     mod_dir: PathBuf,
-    loadbuffer: Option<&'static LoadBuffer>,
     targets: HashSet<String>,
     // Unsorted
     patches: Vec<(Patch, Priority, PathBuf)>,
@@ -457,19 +454,10 @@ impl PatchTable {
 
         PatchTable {
             mod_dir: mod_dir.to_path_buf(),
-            loadbuffer: None,
             targets,
             vars: var_table,
             // args: HashMap::new(),
             patches,
-        }
-    }
-
-    /// Set an override for lual_loadbuffer.
-    pub fn with_loadbuffer(self, loadbuffer: &'static LoadBuffer) -> Self {
-        PatchTable {
-            loadbuffer: Some(loadbuffer),
-            ..self
         }
     }
 
@@ -543,9 +531,8 @@ impl PatchTable {
         let mut rope = Rope::from(buffer);
 
         // Apply module injection patches.
-        let loadbuffer = self.loadbuffer.unwrap();
         for (patch, path) in module_patches {
-            let result = unsafe { patch.apply(target, lua_state, path, &loadbuffer) };
+            let result = unsafe { patch.apply(target, lua_state, path) };
 
             if result {
                 patch_count += 1;

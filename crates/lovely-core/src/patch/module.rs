@@ -33,12 +33,11 @@ impl ModulePatch {
     /// # Safety
     /// This function is unsafe as it interfaces directly with a series of dynamically loaded
     /// native lua functions.
-    pub unsafe fn apply<F: Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32>(
+    pub unsafe fn apply(
         &self,
         file_name: &str,
         state: *mut LuaState,
         path: &Path,
-        lual_loadbufferx: &F,
     ) -> bool {
         if self.load_now && self.before.is_none() {
             panic!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required parameter \"before\" set", path.display(), self.name);
