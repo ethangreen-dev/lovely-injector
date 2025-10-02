@@ -6,15 +6,20 @@ use std::collections::VecDeque;
 
 use itertools::Itertools;
 use libloading::Library;
+
 use log::info;
 
 pub static LUA: OnceLock<LuaLib> = OnceLock::new();
 
 pub type LuaState = c_void;
+pub type LuaFunc = unsafe extern "C" fn(*mut LuaState) -> c_int;
 
 pub const LUA_GLOBALSINDEX: c_int = -10002;
 pub const LUA_TNIL: c_int = 0;
 pub const LUA_TBOOLEAN: c_int = 1;
+pub const fn lua_upvalueindex(i: c_int) -> c_int { // This is a macro in lua
+    LUA_GLOBALSINDEX - i
+}
 
 macro_rules! generate {
     ($libname:ident {
@@ -38,6 +43,13 @@ macro_rules! generate {
     };
 }
 
+// TODO: Can we make this work with variable number of upvalues?
+unsafe extern "C" fn lua_return_values(state: *mut LuaState) -> c_int {
+    let index = lua_upvalueindex(1);
+    lua_pushvalue(state, index);
+    1
+}
+
 generate! (LuaLib {
     pub unsafe extern "C" fn lua_call(state: *mut LuaState, nargs: c_int, nresults: c_int);
     pub unsafe extern "C" fn lua_pcall(state: *mut LuaState, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
@@ -46,9 +58,14 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_gettop(state: *mut LuaState) -> c_int;
     pub unsafe extern "C" fn lua_settop(state: *mut LuaState, index: c_int);
     pub unsafe extern "C" fn lua_pushvalue(state: *mut LuaState, index: c_int);
-    pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: unsafe extern "C" fn(*mut LuaState) -> c_int, n: c_int);
+    pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: LuaFunc, n: c_int);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const c_char;
     pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
+    pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
+    pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
+    pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
+    pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
 });
 
 impl LuaLib {
@@ -67,9 +84,140 @@ impl LuaLib {
             lua_pushcclosure: *library.get(b"lua_pushcclosure").unwrap(),
             lua_tolstring: *library.get(b"lua_tolstring").unwrap(),
             lua_type: *library.get(b"lua_type").unwrap(),
+            lual_register: *library.get(b"luaL_register").unwrap(),
+            lua_pushstring: *library.get(b"lua_pushstring").unwrap(),
+            lua_pushnumber: *library.get(b"lua_pushnumber").unwrap(),
+            lua_settable: *library.get(b"lua_settable").unwrap(),
+            lua_createtable: *library.get(b"lua_createtable").unwrap(),
         }
     }
 }
+
+// TODO: implement all lua methods on this(?)
+pub trait LuaStateTrait {
+    unsafe fn push<P: Pushable>(self, obj: P);
+    unsafe fn push_closure(self, func: LuaFunc, vals: c_int);
+}
+
+impl LuaStateTrait for *mut LuaState {
+    unsafe fn push<P: Pushable>(self, obj: P) {
+        obj.push(self)
+    }
+
+    unsafe fn push_closure(self, func: LuaFunc, vals: c_int) {
+        lua_pushcclosure(self, func, vals);
+    }
+}
+/// A trait which allows the implementing value to generically push its value onto the Lua stack.
+pub trait Pushable {
+    /// Push this value onto the Lua stack.
+    /// 
+    /// # Safety
+    /// Directly interacts with native Lua state.
+    unsafe fn push(&self, state: *mut LuaState);
+}
+
+impl Pushable for String {
+    unsafe fn push(&self, state: *mut LuaState) {
+        let value = format!("{self}\0");
+        lua_pushstring(state, value.as_ptr() as _);
+    }
+}
+
+impl Pushable for &str {
+    unsafe fn push(&self, state: *mut LuaState) {
+        let value = CString::new(*self).unwrap();
+        lua_pushstring(state, value.into_raw() as _);
+    }
+}
+
+impl Pushable for isize {
+    unsafe fn push(&self, state: *mut LuaState) {
+        lua_pushnumber(state, *self as _);
+    }
+}
+
+impl Pushable for LuaFunc {
+    unsafe fn push(&self, state: *mut LuaState) {
+        lua_pushcclosure(state, *self as _, 0);
+    }
+}
+
+pub struct LuaVar<P: > 
+where
+    P: std::ops::Deref,
+    P::Target: Pushable,
+{
+    name: String,
+    val: P,
+}
+
+pub struct LuaModule {
+    var: Vec<LuaVar<Box<dyn Pushable>>>,
+}
+
+impl LuaModule {
+    pub fn new() -> Self {
+        LuaModule {
+            var: vec![],
+        }
+    }
+
+    /// Add a variable to this Lua module.
+    pub fn add_var<P: Pushable + 'static>(self, name: &'static str, val: P) -> Self {
+        let name = format!("{name}\0");
+        let mut var = self.var;
+        let val = Box::new(val);
+        var.push(LuaVar {
+            name,
+            val,
+        });
+
+        LuaModule {
+            var,
+        }
+    }
+
+    /// Commit this Lua module to native Lua state.
+    /// 
+    /// # Safety
+    /// Directly interacts and mutates native Lua state.
+    pub unsafe fn commit(self, state: *mut LuaState, name: &'static str) {
+        let top = lua_gettop(state);
+
+        // Get the package.preloads
+        lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
+        lua_getfield(state, -1, c"preload".as_ptr());
+        let preload_index = lua_gettop(state);
+
+        // Create a table at the top of the stack.
+        lua_createtable(state, 0, self.var.len().try_into().unwrap());
+        let mod_index = lua_gettop(state);
+
+        for lua_var in self.var.iter() {
+            // Push the var name and value onto the stack.
+            lua_pushstring(state, lua_var.name.as_ptr() as _);
+            lua_var.val.push(state);
+
+            // Set the table key:val from what we previously pushed onto the stack.
+            lua_settable(state, -3);
+        }
+
+
+        // Push our function to the stack
+        let func: LuaFunc = lua_return_values;
+
+        lua_settop(state, mod_index);
+        state.push_closure(func, 1);
+
+        let name = CString::new(name).unwrap();
+        lua_setfield(state, preload_index, name.into_raw() as _);
+
+        // Reset the stack.
+        lua_settop(state, top);
+    }
+}
+
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
