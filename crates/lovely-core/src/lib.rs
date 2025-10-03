@@ -23,6 +23,8 @@ use sha2::{Digest, Sha256};
 
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait};
 
+use crate::patch::Target;
+
 pub mod chunk_vec_cursor;
 pub mod log;
 pub mod patch;
@@ -407,7 +409,7 @@ impl PatchTable {
                     match patch {
                         Patch::Copy(ref mut x) => {
                             x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                         Patch::Module(ref mut x) => {
                             x.display_source = x
@@ -420,10 +422,10 @@ impl PatchTable {
                             targets.insert(x.before.clone().unwrap_or_default());
                         }
                         Patch::Pattern(x) => {
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                         Patch::Regex(x) => {
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                     }
                 }
@@ -573,5 +575,30 @@ impl PatchTable {
         let hash = format!("{:x}", hasher.finalize());
 
         format!("LOVELY_INTEGRITY = '{hash}'\n\n{patched}")
+    }
+}
+
+
+
+
+impl Target {
+    pub fn can_apply(&self, target: &str) -> bool {
+        match self {
+            Self::Single(str) => str == target,
+            Self::Multi(strs) => strs.iter().any(|x| x == target)
+        }
+    }
+
+    pub fn insert_into(&self, targets: &mut HashSet<String>) {
+        match self {
+            Self::Single(str) => {
+                targets.insert(str.clone());
+            },
+            Self::Multi(strs) => {
+                for target in strs.iter() {
+                    targets.insert(target.clone());
+                }
+            }
+        }
     }
 }

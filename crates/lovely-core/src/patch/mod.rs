@@ -79,6 +79,13 @@ pub enum Patch {
     Module(ModulePatch),
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Target {
+    Single(String),
+    Multi(Vec<String>)
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum InsertPosition {
