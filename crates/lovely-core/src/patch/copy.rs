@@ -17,6 +17,9 @@ pub struct CopyPatch {
     pub position: CopyPosition,
     pub target: String,
     pub sources: Vec<PathBuf>,
+
+    // Currently unused.
+    pub name: Option<String>
 }
 impl CopyPatch {
     /// Apply a copy patch onto the provided buffer and name.

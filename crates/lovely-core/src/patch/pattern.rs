@@ -27,6 +27,9 @@ pub struct PatternPatch {
     /// We keep this field around for legacy compat. It doesn't do anything (and never has).
     #[serde(default)]
     pub overwrite: bool,
+
+    // Currently unused.
+    pub name: Option<String>
 }
 
 impl PatternPatch {
