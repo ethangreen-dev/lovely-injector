@@ -11,11 +11,11 @@ use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
 
-use super::InsertPosition;
+use super::{InsertPosition, Target};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RegexPatch {
-    pub target: String,
+    pub target: Target,
 
     // The Regex pattern that will be used to both match and create capture groups.
     pub pattern: String,
@@ -49,7 +49,7 @@ pub struct RegexPatch {
 
 impl RegexPatch {
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
-        if self.target != target {
+        if !self.target.can_apply(target) {
             return false;
         }
 
