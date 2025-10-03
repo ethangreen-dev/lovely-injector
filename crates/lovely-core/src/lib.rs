@@ -22,6 +22,8 @@ use regex_lite::Regex;
 
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
+use crate::patch::Target;
+
 pub mod chunk_vec_cursor;
 pub mod log;
 pub mod patch;
@@ -445,7 +447,7 @@ impl PatchTable {
                     match patch {
                         Patch::Copy(ref mut x) => {
                             x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                         Patch::Module(ref mut x) => {
                             x.display_source = x
@@ -458,10 +460,10 @@ impl PatchTable {
                             targets.insert(x.before.clone().unwrap_or_default());
                         }
                         Patch::Pattern(x) => {
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                         Patch::Regex(x) => {
-                            targets.insert(x.target.clone());
+                            x.target.insert_into(&mut targets);
                         }
                     }
                 }
@@ -626,5 +628,30 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
         lua_state.push(false);
         lua_state.push("Internal lovely error: Failed to acquire the lovely runtime");
         2
+    }
+}
+
+
+
+
+impl Target {
+    pub fn can_apply(&self, target: &str) -> bool {
+        match self {
+            Self::Single(str) => str == target,
+            Self::Multi(strs) => strs.iter().any(|x| x == target)
+        }
+    }
+
+    pub fn insert_into(&self, targets: &mut HashSet<String>) {
+        match self {
+            Self::Single(str) => {
+                targets.insert(str.clone());
+            },
+            Self::Multi(strs) => {
+                for target in strs.iter() {
+                    targets.insert(target.clone());
+                }
+            }
+        }
     }
 }
