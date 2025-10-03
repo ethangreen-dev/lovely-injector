@@ -42,6 +42,9 @@ pub struct RegexPatch {
     // If enabled, whitespace is ignored unless escaped
     #[serde(default)]
     pub verbose: bool,
+
+    // Currently unused.
+    pub name: Option<String>
 }
 
 impl RegexPatch {
