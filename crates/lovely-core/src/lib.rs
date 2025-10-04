@@ -596,13 +596,15 @@ impl Target {
     pub fn can_apply(&self, target: &str) -> bool {
         match self {
             Self::Single(str) => str == target,
-            Self::Multi(strs) => /*strs.contains(target)*/ strs.iter().any(|x| x == target)
+            Self::Multi(strs) => strs.iter().any(|x| x == target)
         }
     }
 
     pub fn insert_into(&self, targets: &mut HashSet<String>) {
         match self {
-            Self::Single(str) => {targets.insert(str.clone());},
+            Self::Single(str) => {
+                targets.insert(str.clone());
+            },
             Self::Multi(strs) => {
                 for target in strs.iter() {
                     targets.insert(target.clone());
