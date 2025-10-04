@@ -12,12 +12,15 @@ use std::panic;
 
 use log::*;
 
+use walkdir::WalkDir;
+
 use crop::Rope;
 use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 use sha2::{Digest, Sha256};
+
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait};
 
 pub mod chunk_vec_cursor;
@@ -310,16 +313,8 @@ impl PatchTable {
     /// - MOD_DIR/lovely/*.toml
     pub fn load(mod_dir: &Path) -> PatchTable {
         fn filename_cmp(first: &Path, second: &Path) -> Ordering {
-            let first = first
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_lowercase();
-            let second = second
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_lowercase();
+            let first = first.file_name().unwrap().to_string_lossy().to_lowercase();
+            let second = second.file_name().unwrap().to_string_lossy().to_lowercase();
             first.cmp(&second)
         }
 
@@ -344,7 +339,7 @@ impl PatchTable {
         .sorted_by(|a, b| filename_cmp(a, b));
 
         let patch_files = mod_dirs
-            .flat_map(|dir| {
+            .map(|dir| {
                 let lovely_toml = dir.join("lovely.toml");
                 let lovely_dir = dir.join("lovely");
                 let mut toml_files = Vec::new();
@@ -354,12 +349,10 @@ impl PatchTable {
                 }
 
                 if lovely_dir.is_dir() {
-                    let mut subfiles = fs::read_dir(&lovely_dir)
-                        .unwrap_or_else(|_| {
-                            panic!("Failed to read from lovely directory at '{lovely_dir:?}'.")
-                        })
-                    .filter_map(|x| x.ok())
-                        .map(|x| x.path())
+                    let mut subfiles = WalkDir::new(&lovely_dir)
+                        .into_iter()
+                        .filter_map(|x| x.ok())
+                        .map(|x| x.path().to_path_buf())
                         .filter(|x| x.is_file())
                         .filter(|x| x.extension().is_some_and(|x| x == "toml"))
                         .sorted_by(|a, b| filename_cmp(a, b))
@@ -367,7 +360,7 @@ impl PatchTable {
                     toml_files.append(&mut subfiles);
                 }
 
-                toml_files
+                (dir, toml_files)
             })
         .collect_vec();
 
@@ -376,80 +369,75 @@ impl PatchTable {
         let mut var_table: HashMap<String, String> = HashMap::new();
 
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
-        for patch_file in patch_files {
-            let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
-                panic!(
-                    "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
-                    mod_dir.display(),
-                    patch_file.display()
-                )
-            });
-
-            let patch_dir = patch_file.parent().unwrap();
-
-            // Determine the mod directory from the location of the lovely patch file.
-            let mod_dir = if patch_dir.file_name().unwrap() == "lovely" {
-                patch_dir.parent().unwrap()
-            } else {
-                patch_dir
-            };
-
-            let mut patch_file: PatchFile = {
-                let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
-                    panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
+        for (ref mod_path, patch_file_vec) in patch_files {
+            for patch_file in patch_file_vec {
+                let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
+                    panic!(
+                        "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
+                        mod_dir.display(),
+                        patch_file.display()
+                    )
                 });
 
-                // HACK: Replace instances of {{lovely_hack:patch_dir}} with mod directory.
-                let clean_mod_dir = &mod_dir.to_string_lossy().replace("\\", "\\\\");
-                let str = str.replace("{{lovely_hack:patch_dir}}", clean_mod_dir);
+                let mod_dir = mod_path;
 
-                // Handle invalid fields in a non-explosive way.
-                let ignored_key_callback = |key: serde_ignored::Path| {
-                    warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
+                let mut patch_file: PatchFile = {
+                    let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
+                        panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
+                    });
+
+                    // HACK: Replace instances of {{lovely_hack:patch_dir}} with mod directory.
+                    let clean_mod_dir = &mod_dir.to_string_lossy().replace("\\", "\\\\");
+                    let str = str.replace("{{lovely_hack:patch_dir}}", clean_mod_dir);
+
+                    // Handle invalid fields in a non-explosive way.
+                    let ignored_key_callback = |key: serde_ignored::Path| {
+                        warn!("Unknown key `{key}` found in patch file at {patch_file:?}, ignoring it");
+                    };
+
+                    serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
+                        .unwrap_or_else(|e| {
+                            panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
+                        })
                 };
 
-                serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
-                    .unwrap_or_else(|e| {
-                        panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
-                    })
-            };
-
-            // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
-            // We also cache patch targets to short-circuit patching for files that don't need it.
-            for patch in &mut patch_file.patches[..] {
-                match patch {
-                    Patch::Copy(ref mut x) => {
-                        x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
-                        targets.insert(x.target.clone());
-                    }
-                    Patch::Module(ref mut x) => {
-                        x.display_source = x
-                            .source
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap_or_default();
-                        x.source = mod_dir.join(&x.source);
-                        targets.insert(x.before.clone().unwrap_or_default());
-                    }
-                    Patch::Pattern(x) => {
-                        targets.insert(x.target.clone());
-                    }
-                    Patch::Regex(x) => {
-                        targets.insert(x.target.clone());
+                // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
+                // We also cache patch targets to short-circuit patching for files that don't need it.
+                for patch in &mut patch_file.patches[..] {
+                    match patch {
+                        Patch::Copy(ref mut x) => {
+                            x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
+                            targets.insert(x.target.clone());
+                        }
+                        Patch::Module(ref mut x) => {
+                            x.display_source = x
+                                .source
+                                .clone()
+                                .into_os_string()
+                                .into_string()
+                                .unwrap_or_default();
+                            x.source = mod_dir.join(&x.source);
+                            targets.insert(x.before.clone().unwrap_or_default());
+                        }
+                        Patch::Pattern(x) => {
+                            targets.insert(x.target.clone());
+                        }
+                        Patch::Regex(x) => {
+                            targets.insert(x.target.clone());
+                        }
                     }
                 }
-            }
 
-            let priority = patch_file.manifest.priority;
-            patches.extend(
-                patch_file
-                .patches
-                .into_iter()
-                .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
-            );
-            // TODO concerned about var name conflicts
-            var_table.extend(patch_file.vars);
+                let priority = patch_file.manifest.priority;
+                patches.extend(
+                    patch_file
+                        .patches
+                        .into_iter()
+                        .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
+                );
+                // TODO concerned about var name conflicts
+                var_table.extend(patch_file.vars);
+            }
         }
 
         PatchTable {
@@ -518,10 +506,11 @@ impl PatchTable {
             .patches
             .iter()
             .filter(|(patch, _, _)| matches!(patch, Patch::Pattern(..)))
-            .chain(self
-                .patches
-                .iter()
-                .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))))
+            .chain(
+                self.patches
+                    .iter()
+                    .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
+            )
             .sorted_by_key(|(_, prio, _)| prio)
             .map(|(patch, _, path)| (patch, path))
             .collect_vec();
@@ -550,7 +539,7 @@ impl PatchTable {
             let result = match patch {
                 Patch::Pattern(x) => x.apply(target, &mut rope, path),
                 Patch::Regex(x) => x.apply(target, &mut rope, path),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             if result {
