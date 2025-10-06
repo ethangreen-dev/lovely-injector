@@ -7,7 +7,7 @@ use std::ffi::{CStr, c_int};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs};
-use std::sync::{RwLock, Arc, OnceLock};
+use std::sync::{RwLock, Arc, OnceLock, Mutex};
 use std::panic;
 
 use log::*;
@@ -20,9 +20,7 @@ use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 
-use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait};
-
-use crate::sys::check_lua_string;
+use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -34,7 +32,7 @@ pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 type LoadBuffer =
-    dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
     let result = panic::catch_unwind(|| {
@@ -62,12 +60,55 @@ unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
     2
 }
 
+unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
+    let key = check_lua_string(state, 1);
+    let lovely = &RUNTIME.get().unwrap();
+    {
+        let vars = lovely.lua_vars.lock().unwrap();
+        let val = vars.get(&key);
+        if val.is_none() {
+            return 0;
+        } else {
+            state.push(val.unwrap());
+            return 1;
+        }
+
+    }
+}
+
+unsafe extern "C" fn setvar(state: *mut LuaState) -> c_int {
+    let key = check_lua_string(state, 1);
+    let val = check_lua_string(state, 2);
+    let lovely = &RUNTIME.get().unwrap();
+    {
+        let mut vars = lovely.lua_vars.lock().unwrap();
+        vars.insert(key, val);
+    }
+    0
+}
+
+unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
+    let key = check_lua_string(state, 1);
+    let lovely = &RUNTIME.get().unwrap();
+    {
+        let mut vars = lovely.lua_vars.lock().unwrap();
+        let val = vars.remove(&key);
+        if val.is_none() {
+            return 0;
+        } else {
+            state.push(val.unwrap());
+            return 1;
+        }
+    }
+}
+
 pub struct Lovely {
     pub mod_dir: PathBuf,
     pub is_vanilla: bool,
     loadbuffer: &'static LoadBuffer,
     patch_table: Arc<RwLock<PatchTable>>,
     dump_all: bool,
+    lua_vars: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Lovely {
@@ -127,9 +168,12 @@ impl Lovely {
 
         info!("Lovely {LOVELY_VERSION}");
 
+        let lua_vars = Arc::new(Mutex::new(HashMap::new()));
+
         // Stop here if we're running in vanilla mode.
         if is_vanilla {
             info!("Running in vanilla mode");
+
 
             let lovely = Lovely {
                 mod_dir,
@@ -137,6 +181,7 @@ impl Lovely {
                 loadbuffer,
                 patch_table: Default::default(),
                 dump_all,
+                lua_vars,
             };
             RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
             return RUNTIME.get().unwrap();
@@ -184,6 +229,7 @@ impl Lovely {
             loadbuffer,
             patch_table,
             dump_all,
+            lua_vars,
         };
         RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
         RUNTIME.get().unwrap()
@@ -432,13 +478,13 @@ impl PatchTable {
                 let priority = patch_file.manifest.priority;
                 patches.extend(
                     patch_file
-                        .patches
-                        .into_iter()
-                        .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
+                    .patches
+                    .into_iter()
+                    .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
                 );
                 // TODO concerned about var name conflicts
                 var_table.extend(patch_file.vars);
-            }
+                }
         }
 
         PatchTable {
@@ -466,6 +512,9 @@ impl PatchTable {
         LuaModule::new()
             .add_var("repo", repo)
             .add_var("version", env!("CARGO_PKG_VERSION"))
+            .add_var("set_var", setvar as LuaFunc)
+            .add_var("get_var", getvar as LuaFunc)
+            .add_var("remove_var", removevar as LuaFunc)
             .add_var("mod_dir", mod_dir)
             .add_var("reload_patches", reload_patches as LuaFunc)
             .add_var("apply_patches", apply_patches as LuaFunc)
@@ -510,8 +559,8 @@ impl PatchTable {
             .filter(|(patch, _, _)| matches!(patch, Patch::Pattern(..)))
             .chain(
                 self.patches
-                    .iter()
-                    .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
+                .iter()
+                .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
             )
             .sorted_by_key(|(_, prio, _)| prio)
             .map(|(patch, _, path)| (patch, path))

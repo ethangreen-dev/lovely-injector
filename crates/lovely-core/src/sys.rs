@@ -138,6 +138,13 @@ impl Pushable for String {
     }
 }
 
+impl Pushable for &String {
+    unsafe fn push(&self, state: *mut LuaState) {
+        let value = format!("{self}\0");
+        lua_pushstring(state, value.as_ptr() as _);
+    }
+}
+
 impl Pushable for &str {
     unsafe fn push(&self, state: *mut LuaState) {
         let value = CString::new(*self).unwrap();
