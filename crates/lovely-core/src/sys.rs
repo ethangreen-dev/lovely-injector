@@ -50,6 +50,16 @@ unsafe extern "C" fn lua_return_values(state: *mut LuaState) -> c_int {
     1
 }
 
+// HACK: Panics if not inlined?
+#[inline(always)]
+pub unsafe fn check_lua_string(state: *mut LuaState, index: c_int) -> String {
+    let mut str_len = 0usize;
+    let arg_str = lual_checklstring(state, index, &mut str_len);
+
+    let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len);
+    String::from_utf8_lossy(str_buf).to_string()
+}
+
 generate! (LuaLib {
     pub unsafe extern "C" fn lua_call(state: *mut LuaState, nargs: c_int, nresults: c_int);
     pub unsafe extern "C" fn lua_pcall(state: *mut LuaState, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int;
@@ -67,6 +77,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushboolean(state: *mut LuaState, bool: c_int);
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
     pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
+    pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
 });
 
 impl LuaLib {
@@ -91,6 +102,7 @@ impl LuaLib {
             lua_pushboolean: *library.get(b"lua_pushboolean").unwrap(),
             lua_settable: *library.get(b"lua_settable").unwrap(),
             lua_createtable: *library.get(b"lua_createtable").unwrap(),
+            lual_checklstring: *library.get(b"luaL_checklstring").unwrap(),
         }
     }
 }

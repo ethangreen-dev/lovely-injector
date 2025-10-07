@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use super::{InsertPosition, Target};
+use super::InsertPosition;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PatternPatch {
@@ -17,7 +17,7 @@ pub struct PatternPatch {
 
     // The position to insert the target at. `PatternAt::At` replaces the matched line entirely.
     pub position: InsertPosition,
-    pub target: Target,
+    pub target: String,
     // pub payload_files: Option<Vec<String>>,
     pub payload: String,
     pub match_indent: bool,
@@ -36,7 +36,7 @@ impl PatternPatch {
     /// Apply the pattern patch onto the rope.
     /// The return value will be `true` if the rope was modified.
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
-        if !self.target.can_apply(target) {
+        if self.target != target {
             return false;
         }
 
