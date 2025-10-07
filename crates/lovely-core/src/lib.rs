@@ -23,6 +23,7 @@ use regex_lite::Regex;
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
 use crate::patch::Target;
+use crate::sys::{lua_getfield, lua_isstring, lua_remove, lua_tolstring, Pushable};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -511,6 +512,7 @@ impl PatchTable {
             .add_var("set_var", setvar as LuaFunc)
             .add_var("get_var", getvar as LuaFunc)
             .add_var("remove_var", removevar as LuaFunc)
+            .add_var("create_patch", create_patch as LuaFunc)
             .commit(state, "lovely");
     }
 
@@ -653,5 +655,103 @@ impl Target {
                 }
             }
         }
+    }
+}
+
+unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
+    let string_from_field = |field: &'static CStr| -> Option<String> {
+        lua_getfield(state, 1, field.as_ptr());
+        if lua_isstring(state, 2) != 1 {
+            lua_remove(state, 2);
+            None
+        } else {
+            let mut len = 0;
+            let cstr = lua_tolstring(state, 2, &mut len);
+            let str_buf = slice::from_raw_parts(cstr as *const u8, len);
+            lua_remove(state, 2);
+            Some(String::from_utf8_lossy(str_buf).to_string())
+        }
+    };
+    if let Some(patch_type) = string_from_field(c"type") {
+        match patch_type.as_str() {
+            "pattern" => {
+                let mut invalid_flag: Option<&'static str> = None;
+                let invalid_flag_ref = &mut invalid_flag;
+                let toml = format!(
+                    "[manifest]
+                    version = '1.0.0'
+                    dump_lua = true
+                    priority = {}
+
+                    [[patches]]
+                    [patches.pattern]
+                    target = '''{}'''
+                    pattern = '''{}'''
+                    position = '''{}'''
+                    payload = '''{}'''
+                    match_indent = {}
+                    ",
+                    string_from_field(c"priority").unwrap_or("0".to_string()),
+                    string_from_field(c"target").unwrap_or_else(|| {
+                        *invalid_flag_ref = Some("Missing field: target");
+                        "".to_string()
+                    }),
+                    string_from_field(c"pattern").unwrap_or_else(|| {
+                        *invalid_flag_ref = Some("Missing field: pattern");
+                        "".to_string()
+                    }),
+                    string_from_field(c"position").unwrap_or_else(|| {
+                        *invalid_flag_ref = Some("Missing field: position");
+                        "".to_string()
+                    }),
+                    string_from_field(c"payload").unwrap_or_else(|| {
+                        *invalid_flag_ref = Some("Missing field: payload");
+                        "".to_string()
+                    }),
+                    string_from_field(c"match_indent").unwrap_or_else(|| {
+                        *invalid_flag_ref = Some("Missing field: match_indent");
+                        "".to_string()
+                    }),
+                );
+                if let Some(err) = invalid_flag {
+                    err.push(state);
+                    return 1;
+                }
+                let pf: Result<PatchFile, toml::de::Error> = serde_ignored::deserialize(toml::Deserializer::new(&toml), |_| {});
+                let result_runtime = panic::catch_unwind(|| {
+                    RUNTIME.get().unwrap().patch_table.write().unwrap()
+                });
+                if let Ok(mut rt) = result_runtime {
+                     if let Ok(mut patch_file) = pf {
+                        let opt_patch = patch_file.patches.first();
+                        if let Some(patch) = opt_patch {
+                            if let Patch::Pattern(x) = patch {
+                                let targets = &mut rt.targets;
+                                x.target.insert_into(targets);
+                            }
+                        } else {
+                            format!("Fucked up shit: {toml}").push(state);
+                            return 1;
+                        }
+                        let patch_owned = patch_file.patches.drain(0..1).next().unwrap();
+                        rt.patches.push((patch_owned, patch_file.manifest.priority, Path::new("NO_PATH").to_path_buf()));
+                    } else {
+                        format!("Failed to parse generated toml: {toml}").push(state);
+                        return 1
+                    }
+                } else {
+                    "Failed to acquire lovely runtime".push(state);
+                    return 1;
+                }
+                0
+            },
+            _ => {
+                format!("unsupported: {}", patch_type).push(state);
+                1
+            }
+        }
+    } else {
+        "Missing type argument.".push(state);
+        1
     }
 }

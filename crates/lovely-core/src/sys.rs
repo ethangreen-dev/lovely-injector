@@ -78,6 +78,9 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
     pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
     pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
+    pub unsafe extern "C" fn lua_isnumber(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lua_isstring(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lua_remove(state: *mut LuaState, index: c_int);
 });
 
 impl LuaLib {
@@ -103,6 +106,9 @@ impl LuaLib {
             lua_settable: *library.get(b"lua_settable").unwrap(),
             lua_createtable: *library.get(b"lua_createtable").unwrap(),
             lual_checklstring: *library.get(b"luaL_checklstring").unwrap(),
+            lua_isnumber: *library.get(b"lua_isnumber").unwrap(),
+            lua_isstring: *library.get(b"lua_isstring").unwrap(),
+            lua_remove: *library.get(b"lua_remove").unwrap()
         }
     }
 }
