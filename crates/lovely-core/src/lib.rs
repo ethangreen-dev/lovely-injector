@@ -7,7 +7,7 @@ use std::ffi::{CStr, c_int};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs};
-use std::sync::{RwLock, Arc, OnceLock, Mutex};
+use std::sync::{RwLock, Arc, OnceLock};
 use std::panic;
 
 use log::*;
@@ -63,43 +63,34 @@ unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
 unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let lovely = &RUNTIME.get().unwrap();
-    {
-        let vars = lovely.lua_vars.lock().unwrap();
-        let val = vars.get(&key);
-        if val.is_none() {
-            return 0;
-        } else {
-            state.push(val.unwrap());
-            return 1;
-        }
-
+    let vars = lovely.lua_vars.read().unwrap();
+    let val = vars.get(&key);
+    if val.is_some() {
+        state.push(val.unwrap());
+        return 1;
     }
+    0
 }
 
 unsafe extern "C" fn setvar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let val = check_lua_string(state, 2);
     let lovely = &RUNTIME.get().unwrap();
-    {
-        let mut vars = lovely.lua_vars.lock().unwrap();
-        vars.insert(key, val);
-    }
+    let mut vars = lovely.lua_vars.write().unwrap();
+    vars.insert(key, val);
     0
 }
 
 unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let lovely = &RUNTIME.get().unwrap();
-    {
-        let mut vars = lovely.lua_vars.lock().unwrap();
-        let val = vars.remove(&key);
-        if val.is_none() {
-            return 0;
-        } else {
-            state.push(val.unwrap());
-            return 1;
-        }
+    let mut vars = lovely.lua_vars.write().unwrap();
+    let val = vars.remove(&key);
+    if val.is_some() {
+        state.push(val.unwrap());
+        return 1;
     }
+    0
 }
 
 pub struct Lovely {
@@ -108,7 +99,7 @@ pub struct Lovely {
     loadbuffer: &'static LoadBuffer,
     patch_table: Arc<RwLock<PatchTable>>,
     dump_all: bool,
-    lua_vars: Arc<Mutex<HashMap<String, String>>>,
+    lua_vars: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl Lovely {
@@ -168,7 +159,7 @@ impl Lovely {
 
         info!("Lovely {LOVELY_VERSION}");
 
-        let lua_vars = Arc::new(Mutex::new(HashMap::new()));
+        let lua_vars = Arc::new(RwLock::new(HashMap::new()));
 
         // Stop here if we're running in vanilla mode.
         if is_vanilla {
@@ -512,12 +503,12 @@ impl PatchTable {
         LuaModule::new()
             .add_var("repo", repo)
             .add_var("version", env!("CARGO_PKG_VERSION"))
-            .add_var("set_var", setvar as LuaFunc)
-            .add_var("get_var", getvar as LuaFunc)
-            .add_var("remove_var", removevar as LuaFunc)
             .add_var("mod_dir", mod_dir)
             .add_var("reload_patches", reload_patches as LuaFunc)
             .add_var("apply_patches", apply_patches as LuaFunc)
+            .add_var("set_var", setvar as LuaFunc)
+            .add_var("get_var", getvar as LuaFunc)
+            .add_var("remove_var", removevar as LuaFunc)
             .commit(state, "lovely");
     }
 
