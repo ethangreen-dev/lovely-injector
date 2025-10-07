@@ -19,11 +19,10 @@ use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
-use sha2::{Digest, Sha256};
 
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait};
 
-use crate::patch::Target;
+use crate::sys::check_lua_string;
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -409,7 +408,7 @@ impl PatchTable {
                     match patch {
                         Patch::Copy(ref mut x) => {
                             x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
-                            x.target.insert_into(&mut targets);
+                            targets.insert(x.target.clone());
                         }
                         Patch::Module(ref mut x) => {
                             x.display_source = x
@@ -422,10 +421,10 @@ impl PatchTable {
                             targets.insert(x.before.clone().unwrap_or_default());
                         }
                         Patch::Pattern(x) => {
-                            x.target.insert_into(&mut targets);
+                            targets.insert(x.target.clone());
                         }
                         Patch::Regex(x) => {
-                            x.target.insert_into(&mut targets);
+                            targets.insert(x.target.clone());
                         }
                     }
                 }
@@ -469,6 +468,7 @@ impl PatchTable {
             .add_var("version", env!("CARGO_PKG_VERSION"))
             .add_var("mod_dir", mod_dir)
             .add_var("reload_patches", reload_patches as LuaFunc)
+            .add_var("apply_patches", apply_patches as LuaFunc)
             .commit(state, "lovely");
     }
 
@@ -569,36 +569,22 @@ impl PatchTable {
             info!("Applied {patch_count} patches to '{target}'");
         }
 
-        // Compute the integrity hash of the patched file.
-        let mut hasher = Sha256::new();
-        hasher.update(patched.as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
-
-        format!("LOVELY_INTEGRITY = '{hash}'\n\n{patched}")
+        patched
     }
 }
 
-
-
-
-impl Target {
-    pub fn can_apply(&self, target: &str) -> bool {
-        match self {
-            Self::Single(str) => str == target,
-            Self::Multi(strs) => strs.iter().any(|x| x == target)
-        }
-    }
-
-    pub fn insert_into(&self, targets: &mut HashSet<String>) {
-        match self {
-            Self::Single(str) => {
-                targets.insert(str.clone());
-            },
-            Self::Multi(strs) => {
-                for target in strs.iter() {
-                    targets.insert(target.clone());
-                }
-            }
-        }
+unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
+    let buf_name = check_lua_string(lua_state, 1);
+    let buf = check_lua_string(lua_state, 2);
+    let result = panic::catch_unwind(|| {
+        let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
+        lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
+    });
+    if result.is_ok() {
+        1
+    } else {
+        lua_state.push(false);
+        lua_state.push("Internal lovely error: Failed to acquire the lovely runtime");
+        2
     }
 }

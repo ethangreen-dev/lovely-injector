@@ -4,7 +4,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use super::Target;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -16,7 +15,7 @@ pub enum CopyPosition {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CopyPatch {
     pub position: CopyPosition,
-    pub target: Target,
+    pub target: String,
     pub sources: Vec<PathBuf>,
 
     // Currently unused.
@@ -29,7 +28,7 @@ impl CopyPatch {
     /// If the name *is* a valid target of this patch, prepend or append the source file(s)'s contents
     /// and return true.
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
-        if !self.target.can_apply(target) {
+        if self.target != target {
             return false;
         }
 
