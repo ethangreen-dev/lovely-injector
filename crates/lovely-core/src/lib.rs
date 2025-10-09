@@ -801,8 +801,7 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
     // There won't ever be redundant keys, don't use serde_ignored.
     let pf: Result<PatchFile, toml::de::Error> = PatchFile::deserialize(toml::Deserializer::new(&toml));
     let result_runtime = panic::catch_unwind(|| {
-        // We shouldn't ever be blocked, but if we are I don't think it'll be released if we lock. Just panic (to be caught) if this happens.
-        RUNTIME.get().unwrap().patch_table.try_write().unwrap()
+        RUNTIME.get().unwrap().patch_table.write().unwrap()
     });
     if let Ok(mut rt) = result_runtime {
         if let Ok(mut patch_file) = pf {
