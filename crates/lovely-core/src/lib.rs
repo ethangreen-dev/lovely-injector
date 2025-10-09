@@ -23,7 +23,7 @@ use regex_lite::Regex;
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
 use crate::patch::Target;
-use crate::sys::{lua_getfield, lua_isstring, lua_remove, lua_tolstring, Pushable};
+use crate::sys::{lua_getfield, lua_gettable, lua_gettop, lua_isstring, lua_remove, lua_settop, lua_tolstring, lua_type, Pushable, LUA_TNIL, LUA_TSTRING, LUA_TTABLE};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -659,24 +659,27 @@ impl Target {
 }
 
 unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
-    let string_from_field = |field: &CStr| -> Option<String> {
-        lua_getfield(state, 1, field.as_ptr());
-        if lua_isstring(state, 2) != 1 {
-            lua_remove(state, 2);
+    let string_from_field_specific_index = |field: &CStr, index: c_int| -> Option<String> {
+        lua_getfield(state, index, field.as_ptr());
+        if lua_isstring(state, lua_gettop(state)) != 1 {
+            lua_remove(state, lua_gettop(state));
             None
         } else {
             let mut len = 0;
-            let cstr = lua_tolstring(state, 2, &mut len);
+            let cstr = lua_tolstring(state, lua_gettop(state), &mut len);
             let str_buf = slice::from_raw_parts(cstr as *const u8, len);
-            lua_remove(state, 2);
+            lua_remove(state, lua_gettop(state));
             Some(String::from_utf8_lossy(str_buf).to_string())
         }
+    };
+    let string_from_field = |field: &CStr| -> Option<String> {
+        string_from_field_specific_index(field, 1)
     };
 
     // Collect desired fields into a HashMap. This can probably be done better with lua_next.
     // The only issue with lua_next is that we would need to call tolstring. This doesn't play well with next.
     // However this should still be relatively quick.
-    let fields: HashMap<&'static str, (String, bool)> = vec![
+    let mut fields: HashMap<&'static str, (String, bool)> = vec![
         (c"type", false),
         (c"priority", true),
         (c"pattern", false),
@@ -690,9 +693,7 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         (c"root_capture", true),
         (c"line_prepend", true),
         (c"verbose", false),
-        (c"before", false),
-        (c"load_now", true),
-        (c"sources", false),
+        (c"sources", true),
     ]
     .into_iter()
     .filter_map(|x| string_from_field(x.0).map(|val| (x.0.to_str().unwrap(), (val, x.1)))).collect();
@@ -702,17 +703,16 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         return 1
     }
 
-    let patch_type = fields.get("type").unwrap().0.as_str();
-
-    let required_fields = match patch_type {
+    let required_fields = match fields.get("type").unwrap().0.as_str() {
         "pattern" | "regex" => {
             vec!["pattern", "position", "target", "payload", "match_indent"]
         },
         "module" => {
-            vec!["source", "name"]
+            "Modules aren't supported here. Directly assign to package.preload.".push(state);
+            return 1;
         }
         "copy" => {
-            vec!["position", "target", "name"] // omit sources
+            vec!["position", "target"] // omit sources
         }
         _ => {
             "Invalid argument 'type' provided".push(state);
@@ -720,9 +720,48 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         }
     };
 
+    
+    if fields.get("type").unwrap().0.as_str() == "copy" {
+        lua_getfield(state, 1, c"sources".as_ptr());
+        let is_table = lua_type(state, 2) == LUA_TTABLE;
+        if !is_table {
+            lua_remove(state, 2);
+            "Field 'sources' must be a table.".push(state);
+            return 1
+        }
+
+        let mut sources = Vec::new();
+        let mut i = 1;
+        loop {
+            i.push(state);
+            lua_gettable(state, 2);
+             if lua_type(state, 3) == LUA_TNIL {
+                lua_settop(state, 1);
+                break
+             }
+            if lua_type(state, 3) != LUA_TSTRING {
+                lua_settop(state, 1);
+                "Found non-string item in sources".push(state);
+                return 1;
+            }
+            let mut len = 0;
+            let cstr = lua_tolstring(state, lua_gettop(state), &mut len);
+            let str_buf = slice::from_raw_parts(cstr as *const u8, len);
+            let as_string = String::from_utf8_lossy(str_buf).to_string();
+            lua_remove(state, lua_gettop(state));
+            sources.push(as_string);
+            i += 1;
+        }
+        // Vec<String> Debug implementation generates a deserializable form
+        fields.insert("sources", (format!("{sources:?}"), true));
+    };
+
+    let fields = fields;
+    let patch_type = fields.get("type").unwrap().0.as_str();
+
     for field in required_fields {
         if !fields.contains_key(field) {
-            format!("Missing argument for type {}: {field}", patch_type).push(state);
+            format!("Missing argument or argument type invalid for field {}: {field}", patch_type).push(state);
             return 1;
         }
     }
@@ -753,7 +792,7 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         RUNTIME.get().unwrap().patch_table.try_write().unwrap()
     });
     if let Ok(mut rt) = result_runtime {
-         if let Ok(mut patch_file) = pf {
+        if let Ok(mut patch_file) = pf {
             let opt_patch = patch_file.patches.first_mut();
             let targets = &mut rt.targets;
             if let Some(patch) = opt_patch {
@@ -761,15 +800,7 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
                     Patch::Copy(x) => {
                         x.target.insert_into(targets);
                     }
-                    Patch::Module(ref mut x) => {
-                        x.display_source = x
-                            .source
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap_or_default();
-                        targets.insert(x.before.clone().unwrap_or_default());
-                    }
+                    Patch::Module(_) => (),
                     Patch::Pattern(x) => {
                         x.target.insert_into(targets);
                     }
