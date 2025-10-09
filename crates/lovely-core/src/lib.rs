@@ -12,6 +12,7 @@ use std::panic;
 
 use log::*;
 
+use serde::Deserialize;
 use walkdir::WalkDir;
 
 use crop::Rope;
@@ -609,7 +610,7 @@ impl PatchTable {
 
         if patch_count == 1 {
             info!("Applied 1 patch to '{target}'");
-        } else {
+        } else if patch_count > 1 { // We definitely don't need to know when 0 patches are applied. Quick speedup
             info!("Applied {patch_count} patches to '{target}'");
         }
 
@@ -659,6 +660,8 @@ impl Target {
 }
 
 unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
+
+    // Gets [stack+index][field] and if it is a String, returns Some(that_string). Otherwise returns None
     let string_from_field_specific_index = |field: &CStr, index: c_int| -> Option<String> {
         lua_getfield(state, index, field.as_ptr());
         if lua_isstring(state, lua_gettop(state)) != 1 {
@@ -672,13 +675,16 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
             Some(String::from_utf8_lossy(str_buf).to_string())
         }
     };
+
+    //Above, but it's [stack+1][field]. stack+1 is the table passed to create_patch.
     let string_from_field = |field: &CStr| -> Option<String> {
         string_from_field_specific_index(field, 1)
     };
 
-    // Collect desired fields into a HashMap. This can probably be done better with lua_next.
-    // The only issue with lua_next is that we would need to call tolstring. This doesn't play well with next.
-    // However this should still be relatively quick.
+    // Collect desired fields into a HashMap.
+    // The boolean value denotes whether the desired field should be naked.
+    // Values that are strings (target, payload, pattern) are not naked and are wrapped in '''.
+    // Values that are booleans, numbers, etc are naked and don't get wrapped in anything.
     let mut fields: HashMap<&'static str, (String, bool)> = vec![
         (c"type", false),
         (c"priority", true),
@@ -708,11 +714,14 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
             vec!["pattern", "position", "target", "payload", "match_indent"]
         },
         "module" => {
+            // We would need to call patch.apply from this function, which would be big bad.
+            // I tried to support them, but it caused a weird deadlock that I couldn't figure out.
             "Modules aren't supported here. Directly assign to package.preload.".push(state);
             return 1;
         }
         "copy" => {
-            vec!["position", "target"] // omit sources
+            // Sources is checked separately, as it is a table.
+            vec!["position", "target"]
         }
         _ => {
             "Invalid argument 'type' provided".push(state);
@@ -726,11 +735,12 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         let is_table = lua_type(state, 2) == LUA_TTABLE;
         if !is_table {
             lua_remove(state, 2);
-            "Field 'sources' must be a table.".push(state);
+            "Missing argument or argument type invalid for field 'sources'".push(state);
             return 1
         }
 
         let mut sources = Vec::new();
+        // Don't use lua_next as we aren't interested in keys.
         let mut i = 1;
         loop {
             i.push(state);
@@ -752,7 +762,6 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
             sources.push(as_string);
             i += 1;
         }
-        // Vec<String> Debug implementation generates a deserializable form
         fields.insert("sources", (format!("{sources:?}"), true));
     };
 
@@ -765,6 +774,8 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
             return 1;
         }
     }
+
+    // Translate into toml
 
     let mut toml = String::new();
     toml.push_str(
@@ -787,8 +798,10 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
         }
     }
     
-    let pf: Result<PatchFile, toml::de::Error> = serde_ignored::deserialize(toml::Deserializer::new(&toml), |_| {});
+    // There won't ever be redundant keys, don't use serde_ignored.
+    let pf: Result<PatchFile, toml::de::Error> = PatchFile::deserialize(toml::Deserializer::new(&toml));
     let result_runtime = panic::catch_unwind(|| {
+        // We shouldn't ever be blocked, but if we are I don't think it'll be released if we lock. Just panic (to be caught) if this happens.
         RUNTIME.get().unwrap().patch_table.try_write().unwrap()
     });
     if let Ok(mut rt) = result_runtime {
@@ -809,13 +822,13 @@ unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
                     }
                 }
             } else {
-                format!("Fucked up shit: {toml}").push(state);
+                format!("Failed to parse generated toml:\n{toml}").push(state);
                 return 1;
             }
             let patch_owned = patch_file.patches.drain(0..1).next().unwrap();
             rt.patches.push((patch_owned, patch_file.manifest.priority, Path::new("NO_PATH").to_path_buf()));
         } else {
-            format!("Failed to parse generated toml: {toml}").push(state);
+            format!("Failed to parse generated toml: \n{toml}").push(state);
             return 1
         }
     } else {
