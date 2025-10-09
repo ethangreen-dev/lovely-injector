@@ -621,7 +621,7 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf_name = check_lua_string(lua_state, 1);
     let buf = check_lua_string(lua_state, 2);
     let result = panic::catch_unwind(|| {
-        let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
+        let binding = RUNTIME.get().unwrap().patch_table.try_read().unwrap();
         lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
     });
     if result.is_ok() {
@@ -659,6 +659,143 @@ impl Target {
 }
 
 unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
+    let string_from_field = |field: &CStr| -> Option<String> {
+        lua_getfield(state, 1, field.as_ptr());
+        if lua_isstring(state, 2) != 1 {
+            lua_remove(state, 2);
+            None
+        } else {
+            let mut len = 0;
+            let cstr = lua_tolstring(state, 2, &mut len);
+            let str_buf = slice::from_raw_parts(cstr as *const u8, len);
+            lua_remove(state, 2);
+            Some(String::from_utf8_lossy(str_buf).to_string())
+        }
+    };
+
+    // Collect desired fields into a HashMap. This can probably be done better with lua_next.
+    // The only issue with lua_next is that we would need to call tolstring. This doesn't play well with next.
+    // However this should still be relatively quick.
+    let fields: HashMap<&'static str, (String, bool)> = vec![
+        (c"type", false),
+        (c"priority", true),
+        (c"pattern", false),
+        (c"position", false),
+        (c"target", false),
+        (c"payload", false),
+        (c"match_indent", true),
+        (c"times", true),
+        (c"overwrite", true),
+        (c"name", false),
+        (c"root_capture", true),
+        (c"line_prepend", true),
+        (c"verbose", false),
+        (c"before", false),
+        (c"load_now", true),
+        (c"sources", false),
+    ]
+    .into_iter()
+    .filter_map(|x| string_from_field(x.0).map(|val| (x.0.to_str().unwrap(), (val, x.1)))).collect();
+    
+    if !fields.contains_key("type") {
+        "Missing field 'type'".push(state);
+        return 1
+    }
+
+    let patch_type = fields.get("type").unwrap().0.as_str();
+
+    let required_fields = match patch_type {
+        "pattern" | "regex" => {
+            vec!["pattern", "position", "target", "payload", "match_indent"]
+        },
+        "module" => {
+            vec!["source", "name"]
+        }
+        "copy" => {
+            vec!["position", "target", "name"] // omit sources
+        }
+        _ => {
+            "Invalid argument 'type' provided".push(state);
+            return 1;
+        }
+    };
+
+    for field in required_fields {
+        if !fields.contains_key(field) {
+            format!("Missing argument for type {}: {field}", patch_type).push(state);
+            return 1;
+        }
+    }
+
+    let mut toml = String::new();
+    toml.push_str(
+        "[manifest]
+        version = \"1.0.0\"
+        dump_lua = true
+        priority = "
+    );
+    toml.push_str(fields.get("priority").map(|(x, _)| x.as_str()).unwrap_or("0"));
+
+    toml.push_str(format!("
+    [[patches]]
+    [patches.{patch_type}]").as_str());
+    for (field_key, (field_value, is_naked)) in fields {
+        String::push(&mut toml, '\n');
+        if is_naked {
+            toml.push_str(format!("{field_key} = {field_value}").as_str())
+        } else {
+            toml.push_str(format!("{field_key} = '''{field_value}'''").as_str())
+        }
+    }
+    
+    let pf: Result<PatchFile, toml::de::Error> = serde_ignored::deserialize(toml::Deserializer::new(&toml), |_| {});
+    let result_runtime = panic::catch_unwind(|| {
+        RUNTIME.get().unwrap().patch_table.try_write().unwrap()
+    });
+    if let Ok(mut rt) = result_runtime {
+         if let Ok(mut patch_file) = pf {
+            let opt_patch = patch_file.patches.first_mut();
+            let targets = &mut rt.targets;
+            if let Some(patch) = opt_patch {
+                match patch {
+                    Patch::Copy(x) => {
+                        x.target.insert_into(targets);
+                    }
+                    Patch::Module(ref mut x) => {
+                        x.display_source = x
+                            .source
+                            .clone()
+                            .into_os_string()
+                            .into_string()
+                            .unwrap_or_default();
+                        targets.insert(x.before.clone().unwrap_or_default());
+                    }
+                    Patch::Pattern(x) => {
+                        x.target.insert_into(targets);
+                    }
+                    Patch::Regex(x) => {
+                        x.target.insert_into(targets);
+                    }
+                }
+            } else {
+                format!("Fucked up shit: {toml}").push(state);
+                return 1;
+            }
+            let patch_owned = patch_file.patches.drain(0..1).next().unwrap();
+            rt.patches.push((patch_owned, patch_file.manifest.priority, Path::new("NO_PATH").to_path_buf()));
+        } else {
+            format!("Failed to parse generated toml: {toml}").push(state);
+            return 1
+        }
+    } else {
+        "Failed to acquire lovely runtime".push(state);
+        return 1;
+    }
+
+    0
+}
+
+unsafe extern "C" fn old_create_patch(state: *mut LuaState) -> c_int {
     let string_from_field = |field: &'static CStr| -> Option<String> {
         lua_getfield(state, 1, field.as_ptr());
         if lua_isstring(state, 2) != 1 {
