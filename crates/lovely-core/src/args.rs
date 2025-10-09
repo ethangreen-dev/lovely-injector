@@ -41,10 +41,7 @@ impl Args {
                     args.vanilla = true;
                 }
                 _ => {
-                    // Should we error or ignore like how it's currently done?
                     warn!("Unknown argument: `${arg:?}`")
-                    // If we want to error...
-                    // return Err(arg.unexpected())
                 }
             }
         }

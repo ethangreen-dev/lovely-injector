@@ -6,6 +6,7 @@ use std::panic;
 use std::sync::{LazyLock, OnceLock};
 
 use itertools::Itertools;
+use lovely_core::args::Args;
 use lovely_core::log::*;
 use lovely_core::sys::LuaState;
 use lovely_core::Lovely;
@@ -59,29 +60,18 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         );
     }));
 
-    let args = env::args().collect_vec();
+    // Initialize the lovely runtime.
+    let rt = Lovely::init(
+        Args::try_parse().unwrap(),
+        &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
+        lualib::get_lualib(),
+    );
 
-    if args.contains(&"--vanilla".to_string())
-        || args.contains(&"-v".to_string())
-        || args.contains(&"--disable-mods".to_string())
-        || args.contains(&"-d".to_string())
-    {
-        return 1;
-    }
-
-    if !args.contains(&"--disable-console".to_string()) {
+    if rt.args.disable_console {
         let _ = AllocConsole();
         SetConsoleTitleW(PCWSTR(WIN_TITLE.as_ptr())).expect("Failed to set console title.");
     }
 
-    let dump_all = args.contains(&"--dump-all".to_string());
-
-    // Initialize the lovely runtime.
-    let rt = Lovely::init(
-        &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
-        lualib::get_lualib(),
-        dump_all,
-    );
     RUNTIME
         .set(rt)
         .unwrap_or_else(|_| panic!("Failed to instantiate runtime."));

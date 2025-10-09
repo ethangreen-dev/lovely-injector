@@ -100,19 +100,17 @@ pub struct Lovely {
     pub args: Args,
     loadbuffer: &'static LoadBuffer,
     patch_table: Arc<RwLock<PatchTable>>,
-    dump_all: bool,
     lua_vars: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl Lovely {
     /// Initialize the Lovely patch runtime.
-    pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> &'static Self {
+    pub fn init(args: Args, loadbuffer: &'static LoadBuffer, lualib: LuaLib) -> &'static Self {
         assert!(RUNTIME.get().is_none());
 
         LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
 
         let start = Instant::now();
-        let args = Args::try_parse().unwrap();
         let log_dir = args.mod_dir.join("lovely").join("log");
 
         log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
@@ -125,12 +123,10 @@ impl Lovely {
         if args.vanilla {
             info!("Running in vanilla mode");
 
-
             let lovely = Lovely {
                 args,
                 loadbuffer,
                 patch_table: Default::default(),
-                dump_all,
                 lua_vars,
             };
             RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
@@ -178,7 +174,6 @@ impl Lovely {
             args,
             loadbuffer,
             patch_table,
-            dump_all,
             lua_vars,
         };
         RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
@@ -239,7 +234,7 @@ impl Lovely {
         };
 
         // Stop here if no valid patch exists for this target.
-        if !patch_table.needs_patching(name) && !self.dump_all {
+        if !patch_table.needs_patching(name) && !self.args.dump_all {
             return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
         }
 
