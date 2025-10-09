@@ -15,15 +15,16 @@ use log::*;
 use walkdir::WalkDir;
 
 use crop::Rope;
-use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
+use crate::args::Args;
 use crate::patch::Target;
 
+pub mod args;
 pub mod chunk_vec_cursor;
 pub mod log;
 pub mod patch;
@@ -39,7 +40,7 @@ dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sy
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
     let result = panic::catch_unwind(|| {
         let lovely = &RUNTIME.get().unwrap();
-        let new_table = PatchTable::load(&lovely.mod_dir);
+        let new_table = PatchTable::load(&lovely.args.mod_dir);
         let binding = Arc::clone(&lovely.patch_table);
         let mut patch_table = binding.write().unwrap();
         *patch_table = new_table;
@@ -96,8 +97,7 @@ unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
 }
 
 pub struct Lovely {
-    pub mod_dir: PathBuf,
-    pub is_vanilla: bool,
+    pub args: Args,
     loadbuffer: &'static LoadBuffer,
     patch_table: Arc<RwLock<PatchTable>>,
     dump_all: bool,
@@ -112,50 +112,8 @@ impl Lovely {
         LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
 
         let start = Instant::now();
-
-        let args = std::env::args().skip(1).collect_vec();
-        let mut opts = Options::new(args.iter().map(String::as_str));
-
-        let mut mod_dir = if let Some(env_path) = env::var_os("LOVELY_MOD_DIR") {
-            PathBuf::from(env_path)
-        } else {
-            let cur_exe =
-                env::current_exe().expect("Failed to get the path of the current executable.");
-            let game_name = if env::consts::OS == "macos" {
-                cur_exe
-                    .parent()
-                    .and_then(Path::parent)
-                    .and_then(Path::parent)
-                    .expect("Couldn't find parent .app of current executable path")
-                    .file_name()
-                    .expect("Failed to get file_name of parent directory of current executable")
-                    .to_string_lossy()
-                    .strip_suffix(".app")
-                    .expect("Parent directory of current executable path was not an .app")
-                    .replace(".", "_")
-            } else {
-                cur_exe
-                    .file_stem()
-                    .expect("Failed to get file_stem component of current executable path.")
-                    .to_string_lossy()
-                    .replace(".", "_")
-            };
-            dirs::config_dir().unwrap().join(game_name).join("Mods")
-        };
-
-        let mut is_vanilla = false;
-
-        while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
-            match opt {
-                Arg::Long("mod-dir") => {
-                    mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir)
-                }
-                Arg::Long("vanilla") => is_vanilla = true,
-                _ => (),
-            }
-        }
-
-        let log_dir = mod_dir.join("lovely").join("log");
+        let args = Args::try_parse().unwrap();
+        let log_dir = args.mod_dir.join("lovely").join("log");
 
         log::init(&log_dir).unwrap_or_else(|e| panic!("Failed to initialize logger: {e:?}"));
 
@@ -164,13 +122,12 @@ impl Lovely {
         let lua_vars = Arc::new(RwLock::new(HashMap::new()));
 
         // Stop here if we're running in vanilla mode.
-        if is_vanilla {
+        if args.vanilla {
             info!("Running in vanilla mode");
 
 
             let lovely = Lovely {
-                mod_dir,
-                is_vanilla,
+                args,
                 loadbuffer,
                 patch_table: Default::default(),
                 dump_all,
@@ -195,6 +152,7 @@ impl Lovely {
         info!("Game directory is at {game_dir:?}");
         info!("Writing logs to {log_dir:?}");
 
+        let mod_dir = &args.mod_dir;
         if !mod_dir.is_dir() {
             info!("Creating mods directory at {mod_dir:?}");
             fs::create_dir_all(&mod_dir).unwrap();
@@ -217,8 +175,7 @@ impl Lovely {
         );
 
         let lovely = Lovely {
-            mod_dir,
-            is_vanilla,
+            args,
             loadbuffer,
             patch_table,
             dump_all,
@@ -307,7 +264,7 @@ impl Lovely {
             name.replace("@", "")
         };
 
-        let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
+        let patch_dump = self.args.mod_dir.join("lovely").join("dump").join(&pretty_name);
 
         // Check to see if the dump file already exists to fix a weird panic specific to Wine.
         if pretty_name.chars().count() <= 100 && !fs::exists(&patch_dump).unwrap() {
