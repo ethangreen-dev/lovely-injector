@@ -14,24 +14,7 @@ static RECALL: OnceCell<LoadBufferX> = OnceCell::new();
 
 #[no_mangle]
 unsafe extern "C" fn lovely_init(
-    loadbufferx: LoadBufferX,
-    lua_call: *const std::ffi::c_void,
-    lua_pcall: *const std::ffi::c_void,
-    lua_getfield: *const std::ffi::c_void,
-    lua_setfield: *const std::ffi::c_void,
-    lua_gettop: *const std::ffi::c_void,
-    lua_settop: *const std::ffi::c_void,
-    lua_pushvalue: *const std::ffi::c_void,
-    lua_pushcclosure: *const std::ffi::c_void,
-    lua_tolstring: *const std::ffi::c_void,
-    lua_createtable: *const std::ffi::c_void,
-    lua_pushboolean: *const std::ffi::c_void,
-    lua_pushnumber: *const std::ffi::c_void,
-    lua_pushstring: *const std::ffi::c_void,
-    lua_settable: *const std::ffi::c_void,
-    lua_type: *const std::ffi::c_void,
-    lual_register: *const std::ffi::c_void,
-    lual_checklstring: *const std::ffi::c_void,
+    loadbufferx: LoadBufferX, lua: LuaLib,
 ) {
     if RUNTIME.get().is_none() {
         panic::set_hook(Box::new(|x| {
@@ -40,27 +23,6 @@ unsafe extern "C" fn lovely_init(
         }));
 
         RECALL.set(loadbufferx).expect("Shit's erroring");
-
-
-        let lua = LuaLib {
-            lua_call: std::mem::transmute(lua_call),
-            lua_pcall: std::mem::transmute(lua_pcall),
-            lua_getfield: std::mem::transmute(lua_getfield),
-            lua_setfield: std::mem::transmute(lua_setfield),
-            lua_gettop: std::mem::transmute(lua_gettop),
-            lua_settop: std::mem::transmute(lua_settop),
-            lua_pushvalue: std::mem::transmute(lua_pushvalue),
-            lua_pushcclosure: std::mem::transmute(lua_pushcclosure),
-            lua_tolstring: std::mem::transmute(lua_tolstring),
-            lua_createtable: std::mem::transmute(lua_createtable),
-            lua_pushboolean: std::mem::transmute(lua_pushboolean),
-            lua_pushnumber: std::mem::transmute(lua_pushnumber),
-            lua_pushstring: std::mem::transmute(lua_pushstring),
-            lua_settable: std::mem::transmute(lua_settable),
-            lua_type: std::mem::transmute(lua_type),
-            lual_register: std::mem::transmute(lual_register),
-            lual_checklstring: std::mem::transmute(lual_checklstring),
-        };
 
         let rt = Lovely::init(
             &|a, b, c, d, e| RECALL.get_unchecked()(a, b, c, d, e),
