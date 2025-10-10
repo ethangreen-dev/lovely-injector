@@ -12,6 +12,7 @@ use std::panic;
 
 use log::*;
 
+use serde::Deserialize;
 use walkdir::WalkDir;
 
 use crop::Rope;
@@ -23,6 +24,7 @@ use regex_lite::Regex;
 use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
 
 use crate::patch::Target;
+use crate::sys::{lua_getfield, lua_gettable, lua_gettop, lua_isstring, lua_remove, lua_settop, lua_tolstring, lua_type, Pushable, LUA_TNIL, LUA_TSTRING, LUA_TTABLE};
 
 pub mod chunk_vec_cursor;
 pub mod log;
@@ -511,6 +513,7 @@ impl PatchTable {
             .add_var("set_var", setvar as LuaFunc)
             .add_var("get_var", getvar as LuaFunc)
             .add_var("remove_var", removevar as LuaFunc)
+            .add_var("create_patch", create_patch as LuaFunc)
             .commit(state, "lovely");
     }
 
@@ -607,7 +610,7 @@ impl PatchTable {
 
         if patch_count == 1 {
             info!("Applied 1 patch to '{target}'");
-        } else {
+        } else if patch_count > 1 { // We definitely don't need to know when 0 patches are applied. Quick speedup
             info!("Applied {patch_count} patches to '{target}'");
         }
 
@@ -619,7 +622,7 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf_name = check_lua_string(lua_state, 1);
     let buf = check_lua_string(lua_state, 2);
     let result = panic::catch_unwind(|| {
-        let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
+        let binding = RUNTIME.get().unwrap().patch_table.try_read().unwrap();
         lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
     });
     if result.is_ok() {
@@ -654,4 +657,184 @@ impl Target {
             }
         }
     }
+}
+
+unsafe extern "C" fn create_patch(state: *mut LuaState) -> c_int {
+
+    // Gets [stack+index][field] and if it is a String, returns Some(that_string). Otherwise returns None
+    let string_from_field_specific_index = |field: &CStr, index: c_int| -> Option<String> {
+        lua_getfield(state, index, field.as_ptr());
+        if lua_isstring(state, lua_gettop(state)) != 1 {
+            lua_remove(state, lua_gettop(state));
+            None
+        } else {
+            let mut len = 0;
+            let cstr = lua_tolstring(state, lua_gettop(state), &mut len);
+            let str_buf = slice::from_raw_parts(cstr as *const u8, len);
+            lua_remove(state, lua_gettop(state));
+            Some(String::from_utf8_lossy(str_buf).to_string())
+        }
+    };
+
+    //Above, but it's [stack+1][field]. stack+1 is the table passed to create_patch.
+    let string_from_field = |field: &CStr| -> Option<String> {
+        string_from_field_specific_index(field, 1)
+    };
+
+    // Collect desired fields into a HashMap.
+    // The boolean value denotes whether the desired field should be naked.
+    // Values that are strings (target, payload, pattern) are not naked and are wrapped in '''.
+    // Values that are booleans, numbers, etc are naked and don't get wrapped in anything.
+    let mut fields: HashMap<&'static str, (String, bool)> = vec![
+        (c"type", false),
+        (c"priority", true),
+        (c"pattern", false),
+        (c"position", false),
+        (c"target", false),
+        (c"payload", false),
+        (c"match_indent", true),
+        (c"times", true),
+        (c"overwrite", true),
+        (c"name", false),
+        (c"root_capture", true),
+        (c"line_prepend", true),
+        (c"verbose", false),
+        (c"sources", true),
+    ]
+    .into_iter()
+    .filter_map(|x| string_from_field(x.0).map(|val| (x.0.to_str().unwrap(), (val, x.1)))).collect();
+    
+    if !fields.contains_key("type") {
+        "Missing field 'type'".push(state);
+        return 1
+    }
+
+    let required_fields = match fields.get("type").unwrap().0.as_str() {
+        "pattern" | "regex" => {
+            vec!["pattern", "position", "target", "payload", "match_indent"]
+        },
+        "module" => {
+            // We would need to call patch.apply from this function, which would be big bad.
+            // I tried to support them, but it caused a weird deadlock that I couldn't figure out.
+            "Modules aren't supported here. Directly assign to package.preload.".push(state);
+            return 1;
+        }
+        "copy" => {
+            // Sources is checked separately, as it is a table.
+            vec!["position", "target"]
+        }
+        _ => {
+            "Invalid argument 'type' provided".push(state);
+            return 1;
+        }
+    };
+
+    
+    if fields.get("type").unwrap().0.as_str() == "copy" {
+        lua_getfield(state, 1, c"sources".as_ptr());
+        let is_table = lua_type(state, 2) == LUA_TTABLE;
+        if !is_table {
+            lua_remove(state, 2);
+            "Missing argument or argument type invalid for field 'sources'".push(state);
+            return 1
+        }
+
+        let mut sources = Vec::new();
+        // Don't use lua_next as we aren't interested in keys.
+        let mut i = 1;
+        loop {
+            i.push(state);
+            lua_gettable(state, 2);
+             if lua_type(state, 3) == LUA_TNIL {
+                lua_settop(state, 1);
+                break
+             }
+            if lua_type(state, 3) != LUA_TSTRING {
+                lua_settop(state, 1);
+                "Found non-string item in sources".push(state);
+                return 1;
+            }
+            let mut len = 0;
+            let cstr = lua_tolstring(state, lua_gettop(state), &mut len);
+            let str_buf = slice::from_raw_parts(cstr as *const u8, len);
+            let as_string = String::from_utf8_lossy(str_buf).to_string();
+            lua_remove(state, lua_gettop(state));
+            sources.push(as_string);
+            i += 1;
+        }
+        fields.insert("sources", (format!("{sources:?}"), true));
+    };
+
+    let fields = fields;
+    let patch_type = fields.get("type").unwrap().0.as_str();
+
+    for field in required_fields {
+        if !fields.contains_key(field) {
+            format!("Missing argument or argument type invalid for field {}: {field}", patch_type).push(state);
+            return 1;
+        }
+    }
+
+    // Translate into toml
+
+    let mut toml = String::new();
+    toml.push_str(
+        "[manifest]
+        version = \"1.0.0\"
+        dump_lua = true
+        priority = "
+    );
+    toml.push_str(fields.get("priority").map(|(x, _)| x.as_str()).unwrap_or("0"));
+
+    toml.push_str(format!("
+    [[patches]]
+    [patches.{patch_type}]").as_str());
+    for (field_key, (field_value, is_naked)) in fields {
+        String::push(&mut toml, '\n');
+        if is_naked {
+            toml.push_str(format!("{field_key} = {field_value}").as_str())
+        } else {
+            toml.push_str(format!("{field_key} = '''{field_value}'''").as_str())
+        }
+    }
+    
+    // There won't ever be redundant keys, don't use serde_ignored.
+    let pf: Result<PatchFile, toml::de::Error> = PatchFile::deserialize(toml::Deserializer::new(&toml));
+    let result_runtime = panic::catch_unwind(|| {
+        // We shouldn't ever be blocked, but if we are I don't think it'll be released if we lock. Just panic (to be caught) if this happens.
+        RUNTIME.get().unwrap().patch_table.try_write().unwrap()
+    });
+    if let Ok(mut rt) = result_runtime {
+        if let Ok(mut patch_file) = pf {
+            let opt_patch = patch_file.patches.first_mut();
+            let targets = &mut rt.targets;
+            if let Some(patch) = opt_patch {
+                match patch {
+                    Patch::Copy(x) => {
+                        x.target.insert_into(targets);
+                    }
+                    Patch::Module(_) => (),
+                    Patch::Pattern(x) => {
+                        x.target.insert_into(targets);
+                    }
+                    Patch::Regex(x) => {
+                        x.target.insert_into(targets);
+                    }
+                }
+            } else {
+                format!("Failed to parse generated toml:\n{toml}").push(state);
+                return 1;
+            }
+            let patch_owned = patch_file.patches.drain(0..1).next().unwrap();
+            rt.patches.push((patch_owned, patch_file.manifest.priority, Path::new("NO_PATH").to_path_buf()));
+        } else {
+            format!("Failed to parse generated toml: \n{toml}").push(state);
+            return 1
+        }
+    } else {
+        "Failed to acquire lovely runtime".push(state);
+        return 1;
+    }
+
+    0
 }

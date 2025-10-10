@@ -17,6 +17,8 @@ pub type LuaFunc = unsafe extern "C" fn(*mut LuaState) -> c_int;
 pub const LUA_GLOBALSINDEX: c_int = -10002;
 pub const LUA_TNIL: c_int = 0;
 pub const LUA_TBOOLEAN: c_int = 1;
+pub const LUA_TSTRING: c_int = 4; // Inaccurate to the Lua 5.1 docs, these are 4 and 5
+pub const LUA_TTABLE: c_int = 5;
 pub const fn lua_upvalueindex(i: c_int) -> c_int { // This is a macro in lua
     LUA_GLOBALSINDEX - i
 }
@@ -78,6 +80,10 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
     pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
     pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
+    pub unsafe extern "C" fn lua_isnumber(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lua_isstring(state: *mut LuaState, index: c_int) -> c_int;
+    pub unsafe extern "C" fn lua_remove(state: *mut LuaState, index: c_int);
+    pub unsafe extern "C" fn lua_gettable(state: *mut LuaState, index: c_int);
 });
 
 impl LuaLib {
@@ -103,6 +109,10 @@ impl LuaLib {
             lua_settable: *library.get(b"lua_settable").unwrap(),
             lua_createtable: *library.get(b"lua_createtable").unwrap(),
             lual_checklstring: *library.get(b"luaL_checklstring").unwrap(),
+            lua_isnumber: *library.get(b"lua_isnumber").unwrap(),
+            lua_isstring: *library.get(b"lua_isstring").unwrap(),
+            lua_remove: *library.get(b"lua_remove").unwrap(),
+            lua_gettable: *library.get(b"lua_gettable").unwrap(),
         }
     }
 }
