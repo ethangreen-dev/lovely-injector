@@ -179,13 +179,13 @@ where
     val: P,
 }
 
-pub struct LuaModule {
+pub struct LuaTable {
     var: Vec<LuaVar<Box<dyn Pushable>>>,
 }
 
-impl LuaModule {
+impl LuaTable {
     pub fn new() -> Self {
-        LuaModule {
+        LuaTable {
             var: vec![],
         }
     }
@@ -200,26 +200,16 @@ impl LuaModule {
             val,
         });
 
-        LuaModule {
+        LuaTable {
             var,
         }
     }
+}
 
-    /// Commit this Lua module to native Lua state.
-    /// 
-    /// # Safety
-    /// Directly interacts and mutates native Lua state.
-    pub unsafe fn commit(self, state: *mut LuaState, name: &'static str) {
-        let top = lua_gettop(state);
-
-        // Get the package.preloads
-        lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
-        lua_getfield(state, -1, c"preload".as_ptr());
-        let preload_index = lua_gettop(state);
-
+impl Pushable for LuaTable {
+        unsafe fn push(&self, state: *mut LuaState) {
         // Create a table at the top of the stack.
         lua_createtable(state, 0, self.var.len().try_into().unwrap());
-        let mod_index = lua_gettop(state);
 
         for lua_var in self.var.iter() {
             // Push the var name and value onto the stack.
@@ -229,22 +219,35 @@ impl LuaModule {
             // Set the table key:val from what we previously pushed onto the stack.
             lua_settable(state, -3);
         }
-
-
-        // Push our function to the stack
-        let func: LuaFunc = lua_return_values;
-
-        lua_settop(state, mod_index);
-        state.push_closure(func, 1);
-
-        let name = CString::new(name).unwrap();
-        lua_setfield(state, preload_index, name.into_raw() as _);
-
-        // Reset the stack.
-        lua_settop(state, top);
     }
 }
 
+/// Commit this Lua module to native Lua state.
+/// 
+/// # Safety
+/// Directly interacts and mutates native Lua state.
+pub unsafe fn preload_module<P: Pushable>(state: *mut LuaState, name: &'static str, value: P) {
+    let top = lua_gettop(state);
+
+    // Get the package.preloads
+    lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
+    lua_getfield(state, -1, c"preload".as_ptr());
+    let preload_index = lua_gettop(state);
+
+    // Push the value to the stack
+    value.push(state);
+
+    // Push our function to the stack
+    let func: LuaFunc = lua_return_values;
+
+    state.push_closure(func, 1);
+
+    let name = CString::new(name).unwrap();
+    lua_setfield(state, preload_index, name.into_raw() as _);
+
+    // Reset the stack.
+    lua_settop(state, top);
+}
 
 /// Load the provided buffer as a lua module with the specified name.
 /// # Safety
