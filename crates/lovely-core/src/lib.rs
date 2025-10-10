@@ -20,7 +20,7 @@ use itertools::Itertools;
 use patch::{Patch, PatchFile, Priority};
 use regex_lite::Regex;
 
-use sys::{LuaLib, LuaState, LuaModule, LUA, LuaFunc, LuaStateTrait, check_lua_string};
+use sys::{LuaLib, LuaState, LuaTable, LUA, LuaFunc, LuaStateTrait, check_lua_string, preload_module};
 
 use crate::patch::Target;
 
@@ -502,7 +502,7 @@ impl PatchTable {
         let mod_dir = self.mod_dir.to_str().unwrap().replace('\\', "/");
         let repo = "https://github.com/ethangreen-dev/lovely-injector";
 
-        LuaModule::new()
+        preload_module(state, "lovely", LuaTable::new()
             .add_var("repo", repo)
             .add_var("version", env!("CARGO_PKG_VERSION"))
             .add_var("mod_dir", mod_dir)
@@ -511,7 +511,7 @@ impl PatchTable {
             .add_var("set_var", setvar as LuaFunc)
             .add_var("get_var", getvar as LuaFunc)
             .add_var("remove_var", removevar as LuaFunc)
-            .commit(state, "lovely");
+        );
     }
 
     /// Apply one or more patches onto the target's buffer.
