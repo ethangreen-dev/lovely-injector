@@ -67,7 +67,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
         lualib::get_lualib(),
     );
 
-    if rt.args.disable_console {
+    if !rt.args.disable_console {
         let _ = AllocConsole();
         SetConsoleTitleW(PCWSTR(WIN_TITLE.as_ptr())).expect("Failed to set console title.");
     }
