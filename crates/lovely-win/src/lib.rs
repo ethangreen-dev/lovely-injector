@@ -23,6 +23,7 @@ static RUNTIME: OnceLock<&Lovely> = OnceLock::new();
 
 static_detour! {
     pub static LuaLoadbufferx_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8,*const u8) -> u32;
+    pub static LuaLoadbuffer_Detour: unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8) -> u32;
 }
 
 static WIN_TITLE: LazyLock<U16CString> =
@@ -99,6 +100,20 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
             lua_loadbufferx_detour(a, b, c, d, e)
         })
         .unwrap()
+        .enable()
+        .unwrap();
+
+    let proc = GetProcAddress(handle, s!("luaL_loadbuffer")).unwrap();
+    let fn_target = std::mem::transmute::<
+        _,
+        unsafe extern "C" fn(*mut c_void, *const u8, usize, *const u8) -> u32,
+        >(proc);
+
+    LuaLoadbuffer_Detour
+        .initialize(fn_target, |a, b, c, d| {
+            lua_loadbufferx_detour(a, b, c, d, std::ptr::null())
+        })
+    .unwrap()
         .enable()
         .unwrap();
 
