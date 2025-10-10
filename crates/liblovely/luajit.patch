@@ -12,7 +12,7 @@ index a44f0272..f2541a5b 100644
  				   const char *name, const char *mode);
  LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
 diff --git a/src/lib_aux.c b/src/lib_aux.c
-index 4b4664a7..a2f89c81 100644
+index 4b4664a7..a9debce9 100644
 --- a/src/lib_aux.c
 +++ b/src/lib_aux.c
 @@ -22,6 +22,7 @@
@@ -23,19 +23,21 @@ index 4b4664a7..a2f89c81 100644
  
  #if LJ_TARGET_POSIX
  #include <sys/wait.h>
-@@ -351,6 +352,7 @@ static void *mem_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+@@ -351,6 +352,8 @@ static void *mem_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
  
  LUALIB_API lua_State *luaL_newstate(void)
  {
-+  lovely_init(lovely_loadbufferx, lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_createtable, lua_pushboolean, lua_pushnumber, lua_pushstring, lua_settable, lua_type, luaL_register, luaL_checklstring);
++  struct LuaLib lua = {lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_type, luaL_register, lua_pushstring, lua_pushnumber, lua_pushboolean, lua_settable, lua_createtable, luaL_checklstring};
++  lovely_init(lovely_loadbufferx, lua);
    lua_State *L = lua_newstate(mem_alloc, NULL);
    if (L) {
      G(L)->panic = panic;
-@@ -369,6 +371,7 @@ LUALIB_API lua_State *luaL_newstate(void)
+@@ -369,6 +372,8 @@ LUALIB_API lua_State *luaL_newstate(void)
  
  LUALIB_API lua_State *luaL_newstate(void)
  {
-+  lovely_init(lovely_loadbufferx, lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_createtable, lua_pushboolean, lua_pushnumber, lua_pushstring, lua_settable, lua_type, luaL_register, luaL_checklstring);
++  struct LuaLib lua = {lua_call, lua_pcall, lua_getfield, lua_setfield, lua_gettop, lua_settop, lua_pushvalue, lua_pushcclosure, lua_tolstring, lua_type, luaL_register, lua_pushstring, lua_pushnumber, lua_pushboolean, lua_settable, lua_createtable, luaL_checklstring};
++  lovely_init(lovely_loadbufferx, lua);
    lua_State *L;
  #if LJ_64 && !LJ_GC64
    L = lj_state_newstate(LJ_ALLOCF_INTERNAL, NULL);
@@ -74,15 +76,34 @@ index 24b660a8..daa8ef29 100644
  {
 diff --git a/src/lovely.h b/src/lovely.h
 new file mode 100644
-index 00000000..b0c443d2
+index 00000000..c5fbbdeb
 --- /dev/null
 +++ b/src/lovely.h
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,27 @@
 +#ifndef LOVELY_H
 +#define LOVELY_H
 +
-+void lovely_init(void *loadbufferx, void *lua_call, void *lua_pcall, void *lua_getfield, void *lua_setfield, void *lua_gettop, void *lua_settop, void *lua_pushvalue, void *lua_pushcclosure, void *lua_tolstring, void *lua_createtable, void *lua_pushboolean, void *lua_pushnumber, void *lua_pushstring, void *lua_settable, void *lua_type, void *luaL_register, void *luaL_checklstring);
++struct LuaLib {
++	void *lua_call;
++	void *lua_pcall;
++	void *lua_getfield;
++	void *lua_setfield;
++	void *lua_gettop;
++	void *lua_settop;
++	void *lua_pushvalue;
++	void *lua_pushcclosure;
++	void *lua_tolstring;
++	void *lua_type;
++	void *luaL_register;
++	void *lua_pushstring;
++	void *lua_pushnumber;
++	void *lua_pushboolean;
++	void *lua_settable;
++	void *lua_createtable;
++	void *luaL_checklstring;
++};
 +
-+int lovely_apply_patches(lua_State *L, const char *buff, size_t sz,
-+    const char *name, const char *mode);
++void lovely_init(void *loadbufferx, struct LuaLib);
++
++int lovely_apply_patches(lua_State *L, const char *buff, size_t sz, const char *name, const char *mode);
 +#endif // LOVELY_H

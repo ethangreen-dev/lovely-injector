@@ -27,6 +27,7 @@ macro_rules! generate {
             $vis:vis unsafe extern "C" fn $method:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)?;
         )*
     }) => {
+        #[repr(C)]
         pub struct $libname {
             $(
                 $vis $method: unsafe extern "C" fn($($arg: $ty),*) $(-> $ret)?,
