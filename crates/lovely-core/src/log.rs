@@ -15,6 +15,7 @@ static LOGGER: OnceLock<LovelyLogger> = OnceLock::new();
 struct LovelyLogger {
     use_console: bool,
     log_file: RwLock<File>,
+    log_path: String,
 }
 
 impl Log for LovelyLogger {
@@ -61,7 +62,13 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
     let logger = LovelyLogger {
         use_console: true,
         log_file: RwLock::new(log_file),
+        log_path: String::from(log_path.to_str().unwrap()),
     };
     
     log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info))
+}
+
+
+pub fn get_log_path() -> Option<String> {
+    LOGGER.get().map(|x| x.log_path.clone())
 }

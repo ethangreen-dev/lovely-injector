@@ -511,6 +511,7 @@ impl PatchTable {
             .add_var("set_var", setvar as LuaFunc)
             .add_var("get_var", getvar as LuaFunc)
             .add_var("remove_var", removevar as LuaFunc)
+            .add_var("log_path", get_log_path().unwrap())
         );
     }
 
