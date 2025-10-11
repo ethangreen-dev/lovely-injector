@@ -70,10 +70,5 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
 
 
 pub fn get_log_path() -> Option<String> {
-    let logger = LOGGER.get();
-    if logger.is_none() {
-        return None;
-    }
-    let logger = logger.unwrap();
-    Some(logger.log_path.clone())
+    LOGGER.get().map(|x| x.log_path.clone())
 }
