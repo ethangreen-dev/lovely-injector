@@ -39,10 +39,6 @@ impl ModulePatch {
         state: *mut LuaState,
         path: &Path,
     ) -> bool {
-        if self.load_now && self.before.is_none() {
-            panic!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required parameter \"before\" set", path.display(), self.name);
-        }
-
         // Stop if we're not at the correct insertion point.
         if self.load_now && self.before.as_ref().unwrap() != file_name {
             return false;
