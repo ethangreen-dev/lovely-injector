@@ -9,6 +9,7 @@ use std::time::Instant;
 use std::{env, fs};
 use std::sync::{RwLock, Arc, OnceLock};
 use std::panic;
+use anyhow::{Result, Context, bail};
 
 use log::*;
 
@@ -37,29 +38,21 @@ type LoadBuffer =
 dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
-    let result = panic::catch_unwind(|| {
-        let lovely = &RUNTIME.get().unwrap();
-        let new_table = PatchTable::load(&lovely.mod_dir);
-        let binding = Arc::clone(&lovely.patch_table);
-        let mut patch_table = binding.write().unwrap();
-        *patch_table = new_table;
-    });
-    let success = result.is_ok();
-    if success {
-        state.push(true);
-        return 1;
-    }
-    let err = result.unwrap_err();
-    let msg = if let Some(s) = err.downcast_ref::<&str>() {
-        s.to_string()
-    } else if let Some(s) = err.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "Unknown panic".to_string()
+    let lovely = &RUNTIME.get().unwrap();
+    let result = PatchTable::load(&lovely.mod_dir);
+    let new_table = match result {
+        Ok(t) => t,
+        Err(e) => {
+            state.push(false);
+            state.push(format!("{:?}", e));
+            return 2;
+        },
     };
-    state.push(false);
-    state.push(msg);
-    2
+    let binding = Arc::clone(&lovely.patch_table);
+    let mut patch_table = binding.write().unwrap();
+    *patch_table = new_table;
+    state.push(true);
+    1
 }
 
 unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
@@ -205,7 +198,7 @@ impl Lovely {
         }
 
         info!("Using mod directory at {mod_dir:?}");
-        let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir)));
+        let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir).unwrap()));
 
         let dump_dir = mod_dir.join("lovely").join("dump");
         if dump_dir.is_dir() {
@@ -355,7 +348,7 @@ impl PatchTable {
     /// within each subdirectory that matches either:
     /// - MOD_DIR/lovely.toml
     /// - MOD_DIR/lovely/*.toml
-    pub fn load(mod_dir: &Path) -> PatchTable {
+    pub fn load(mod_dir: &Path) -> Result<PatchTable> {
         fn filename_cmp(first: &Path, second: &Path) -> Ordering {
             let first = first.file_name().unwrap().to_string_lossy().to_lowercase();
             let second = second.file_name().unwrap().to_string_lossy().to_lowercase();
@@ -363,9 +356,9 @@ impl PatchTable {
         }
 
         let mod_dirs = fs::read_dir(mod_dir)
-            .unwrap_or_else(|e| {
-                panic!("Failed to read from mod directory within {mod_dir:?}:\n{e:?}")
-            })
+            .with_context(|| {
+                format!("Failed to read from mod directory within {mod_dir:?}")
+            })?
         .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
             .map(|x| x.path())
@@ -415,20 +408,20 @@ impl PatchTable {
         // Load n > 0 patch files from the patch directory, collecting them for later processing.
         for (ref mod_path, patch_file_vec) in patch_files {
             for patch_file in patch_file_vec {
-                let mod_relative_path = patch_file.strip_prefix(mod_dir).unwrap_or_else(|e| {
-                    panic!(
-                        "Base mod directory path {} expected to be a prefix of patch file path {}:\n{e:?}",
+                let mod_relative_path = patch_file.strip_prefix(mod_dir).with_context(|| {
+                    format!(
+                        "Base mod directory path {} expected to be a prefix of patch file path {}",
                         mod_dir.display(),
                         patch_file.display()
                     )
-                });
+                })?;
 
                 let mod_dir = mod_path;
 
                 let mut patch_file: PatchFile = {
-                    let str = fs::read_to_string(&patch_file).unwrap_or_else(|e| {
-                        panic!("Failed to read patch file at {patch_file:?}:\n{e:?}")
-                    });
+                    let str = fs::read_to_string(&patch_file).with_context(|| {
+                        format!("Failed to read patch file at {patch_file:?}")
+                    })?;
 
                     // HACK: Replace instances of {{lovely_hack:patch_dir}} with mod directory.
                     let clean_mod_dir = &mod_dir.to_string_lossy().replace("\\", "\\\\");
@@ -440,13 +433,14 @@ impl PatchTable {
                     };
 
                     serde_ignored::deserialize(toml::Deserializer::new(&str), ignored_key_callback)
-                        .unwrap_or_else(|e| {
-                            panic!("Failed to parse patch file at {patch_file:?}:\n{}", e)
-                        })
+                        .with_context(|| {
+                            format!("Failed to parse patch file at {patch_file:?}")
+                        })?
                 };
 
                 // For each patch, map relative paths onto absolute paths, rooted within each's mod directory.
                 // We also cache patch targets to short-circuit patching for files that don't need it.
+                // For module patches, we verify that they are valid.
                 for patch in &mut patch_file.patches[..] {
                     match patch {
                         Patch::Copy(ref mut x) => {
@@ -454,6 +448,10 @@ impl PatchTable {
                             x.target.insert_into(&mut targets);
                         }
                         Patch::Module(ref mut x) => {
+                            if x.load_now && x.before.is_none() {
+                                bail!("Error at patch file {}:\nModule \"{}\" has \"load_now\" set to true, but does not have required parameter \"before\" set", mod_relative_path.display(), x.name);
+                            }
+
                             x.display_source = x
                                 .source
                                 .clone()
@@ -479,18 +477,18 @@ impl PatchTable {
                     .into_iter()
                     .map(|patch| (patch, priority, mod_relative_path.to_path_buf())),
                 );
-                // TODO concerned about var name conflicts
+                // TODO: concerned about var name conflicts
                 var_table.extend(patch_file.vars);
-                }
+            }
         }
 
-        PatchTable {
+        Ok(PatchTable {
             mod_dir: mod_dir.to_path_buf(),
             targets,
             vars: var_table,
             // args: HashMap::new(),
             patches,
-        }
+        })
     }
 
     /// Determine if the provided target file / name requires patching.
