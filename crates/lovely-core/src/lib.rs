@@ -183,13 +183,17 @@ impl Lovely {
         // Validate that an older Lovely install doesn't already exist within the game directory.
         let exe_path = env::current_exe().unwrap();
         let game_dir = exe_path.parent().unwrap();
-        let dwmapi = game_dir.join("dwmapi.dll");
 
-        if dwmapi.is_file() {
-            panic!(
-                "An old Lovely installation was detected within the game directory. \
-                This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
-            );
+        #[cfg(target_os = "windows")]
+        {
+            let dwmapi = game_dir.join("dwmapi.dll");
+
+            if dwmapi.is_file() {
+                panic!(
+                    "An old Lovely installation was detected within the game directory. \
+                    This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
+                );
+            }
         }
 
         info!("Game directory is at {game_dir:?}");
