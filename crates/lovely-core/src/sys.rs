@@ -75,9 +75,9 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
     pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
     pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
-    pub unsafe extern "C" fn lua_pushboolean(state: *mut LuaState, bool: c_int);
-    pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: isize);
-    pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: isize, nrec: isize);
+    pub unsafe extern "C" fn lua_pushboolean(state: *mut LuaState, b: c_int);
+    pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: c_int);
+    pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: c_int, nrec: c_int);
     pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
 });
 
