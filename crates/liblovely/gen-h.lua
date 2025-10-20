@@ -13,6 +13,14 @@ local types = {
 	f64 = "double",
 }
 
+local functionPatches = { -- Functions where rust has different types
+	luaL_register = {
+		args = {
+			[3] = "const luaL_Reg *l"
+		}
+	},
+}
+
 local function convertType(str, name)
 	local pointer, mod, type = str:match("(%*)(%S+)%s+(.+)")
 	if not pointer then
@@ -87,14 +95,6 @@ for line in sys_file:lines() do
 	end
 end
 sys_file:close()
-
-local functionPatches = { -- Functions where rust has different types
-	luaL_register = {
-		args = {
-			[3] = "const luaL_Reg *l"
-		}
-	},
-}
 
 for k, f in pairs(functions) do
 	local patches = functionPatches[f.name]
