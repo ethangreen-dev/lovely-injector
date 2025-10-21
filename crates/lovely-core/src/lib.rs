@@ -621,7 +621,11 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf = check_lua_string(lua_state, 2);
     let result = panic::catch_unwind(|| {
         let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
-        lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
+        if binding.needs_patching(&buf_name) {
+            lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
+        } else {
+            lua_state.push(buf)
+        }
     });
     if result.is_ok() {
         1
