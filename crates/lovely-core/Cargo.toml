@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 dirs = "5.0.1"
-getargs = "0.5.0"
+lexopt = "0.3.1"
 libc = "0.2.153"
 libloading = "0.8.3"
 toml = "0.8.10"

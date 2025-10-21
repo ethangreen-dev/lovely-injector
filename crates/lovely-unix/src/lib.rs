@@ -1,7 +1,7 @@
 mod lualib;
 
-use lovely_core::log::*;
 use lovely_core::sys::LuaState;
+use lovely_core::{args::Args, log::*};
 use lualib::LUA_LIBRARY;
 use std::{
     env,
@@ -62,19 +62,10 @@ unsafe fn construct() {
         error!("{message}");
     }));
 
-    let args: Vec<_> = env::args().collect();
-
-    if args.contains(&"--vanilla".to_string()) || args.contains(&"-v".to_string()) {
-        info!("running in vanilla mode");
-        return;
-    }
-
-    let dump_all = args.contains(&"--dump-all".to_string());
-
     let rt = Lovely::init(
+        Args::try_parse().unwrap(),
         &|a, b, c, d, e| RECALL(a, b, c, d, e),
         lualib::get_lualib(),
-        dump_all,
     );
     RUNTIME
         .set(rt)
