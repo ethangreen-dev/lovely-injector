@@ -19,6 +19,8 @@ pub struct CopyPatch {
     pub target: Target,
     pub sources: Vec<PathBuf>,
 
+    pub payload: Option<String>,
+
     // Currently unused.
     pub name: Option<String>
 }
@@ -52,6 +54,19 @@ impl CopyPatch {
                 CopyPosition::Append => {
                     rope.insert(rope.byte_len(), "\n");
                     rope.insert(rope.byte_len(), &contents);
+                }
+            }
+        }
+
+        if let Some(ref payload) = self.payload {
+            match self.position {
+                CopyPosition::Prepend => {
+                    rope.insert(0, "\n");
+                    rope.insert(0, payload);
+                }
+                CopyPosition::Append => {
+                    rope.insert(rope.byte_len(), "\n");
+                    rope.insert(rope.byte_len(), payload);
                 }
             }
         }
