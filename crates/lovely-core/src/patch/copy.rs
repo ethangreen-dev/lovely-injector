@@ -17,7 +17,7 @@ pub enum CopyPosition {
 pub struct CopyPatch {
     pub position: CopyPosition,
     pub target: Target,
-    pub sources: Vec<PathBuf>,
+    pub sources: Option<Vec<PathBuf>>,
 
     pub payload: Option<String>,
 
@@ -35,25 +35,29 @@ impl CopyPatch {
             return false;
         }
 
+        
+
         // Merge the provided payloads into a single buffer. Each source path should
         // be made absolute by the patch loader.
-        for source in self.sources.iter() {
-            let contents = fs::read_to_string(source).unwrap_or_else(|e| {
-                panic!(
-                    "Failed to read source file at {source:?} for copy patch from {}: {e:?}",
-                    path.display()
-                )
-            });
+        if let Some(ref sources) = self.sources {
+            for source in sources.iter() {
+                let contents = fs::read_to_string(source).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to read source file at {source:?} for copy patch from {}: {e:?}",
+                        path.display()
+                    )
+                });
 
-            // Append or prepend the patch's lines onto the provided buffer.
-            match self.position {
-                CopyPosition::Prepend => {
-                    rope.insert(0, "\n");
-                    rope.insert(0, &contents);
-                }
-                CopyPosition::Append => {
-                    rope.insert(rope.byte_len(), "\n");
-                    rope.insert(rope.byte_len(), &contents);
+                // Append or prepend the patch's lines onto the provided buffer.
+                match self.position {
+                    CopyPosition::Prepend => {
+                        rope.insert(0, "\n");
+                        rope.insert(0, &contents);
+                    }
+                    CopyPosition::Append => {
+                        rope.insert(rope.byte_len(), "\n");
+                        rope.insert(rope.byte_len(), &contents);
+                    }
                 }
             }
         }

@@ -444,7 +444,18 @@ impl PatchTable {
                 for patch in &mut patch_file.patches[..] {
                     match patch {
                         Patch::Copy(ref mut x) => {
-                            x.sources = x.sources.iter_mut().map(|x| mod_dir.join(x)).collect();
+                            if let Some(ref mut sources) = x.sources {
+                                x.sources = Some(sources.iter_mut().map(|x| mod_dir.join(x)).collect())
+                            }
+
+                            if x.sources.is_none() && x.payload.is_none() {
+                                let name = match &x.name {
+                                    None => "".to_string(),
+                                    Some(name ) => format!(" \"{name}\"")
+                                };
+                                bail!("Error at patch file {}:\nCopy{name} does not have a \"payload\" or \"sources\" parameter set.", mod_relative_path.display())
+                            }
+
                             x.target.insert_into(&mut targets);
                         }
                         Patch::Module(ref mut x) => {
