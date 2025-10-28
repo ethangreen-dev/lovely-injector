@@ -355,12 +355,35 @@ impl PatchTable {
             first.cmp(&second)
         }
 
+        let blacklist_file = mod_dir.join("lovely").join("blacklist.txt");
+
+        let mut blacklist: HashSet<String> = HashSet::new();
+        if fs::exists(&blacklist_file)? {
+            let text = fs::read_to_string(blacklist_file).context("Could not read blacklist")?;
+
+            for line in text.lines() {
+                if line.is_empty() || line.starts_with("#") { continue; }
+                blacklist.insert(line.to_string());
+            }
+        } else {
+            info!("No blacklist.txt in Mods/lovely.");
+        }
+
         let mod_dirs = fs::read_dir(mod_dir)
             .with_context(|| {
                 format!("Failed to read from mod directory within {mod_dir:?}")
             })?
         .filter_map(|x| x.ok())
             .filter(|x| x.path().is_dir())
+            .filter(|x| {
+                let cname = x.file_name();
+                let name = cname.to_str().unwrap();
+                let blacklisted = blacklist.contains(name);
+                if blacklisted {
+                    info!("'{name}' was found in blacklist, skipping it.");
+                }
+                !blacklisted
+            })
             .map(|x| x.path())
             .filter(|x| {
                 let ignore_file = x.join(".lovelyignore");
