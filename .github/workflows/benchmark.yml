@@ -1,0 +1,62 @@
+name: Benchmark PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks on base branch
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+          export LOVELY_BENCH_MODE=short
+          cargo bench --bench patches -- --save-baseline base
+          mkdir -p /tmp/base-results
+          cp -r target/criterion /tmp/base-results/
+
+      - name: Run benchmarks on PR branch
+        run: |
+          git checkout ${{ github.event.pull_request.head.sha }}
+          export LOVELY_BENCH_MODE=short
+          cargo bench --bench patches -- --save-baseline pr
+
+      - name: Install Python dependencies
+        run: |
+          pip install matplotlib numpy plotly
+
+      - name: Generate comparison report
+        run: |
+          mkdir -p /tmp/charts
+          python crates/lovely-core/benches/scripts/compare_benchmarks.py \
+            /tmp/base-results/criterion \
+            target/criterion \
+            /tmp/report.md \
+            /tmp/charts
+
+      - name: Upload charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-charts
+          path: /tmp/charts/*.png
+
+      - name: Post comment with results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Script goes here?
