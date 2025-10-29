@@ -4,7 +4,7 @@ use std::env;
 use std::ffi::c_void;
 use std::panic;
 use std::sync::{LazyLock, OnceLock};
-
+use anyhow::Context;
 use itertools::Itertools;
 use lovely_core::log::*;
 use lovely_core::sys::LuaState;
@@ -58,7 +58,7 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
             PCWSTR(WIN_TITLE.as_ptr()),
             MESSAGEBOX_STYLE(0),
         );
-
+        
         std::process::abort();
     }));
 
@@ -82,7 +82,12 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     // Initialize the lovely runtime.
     let rt = Lovely::init(
         &|a, b, c, d, e| LuaLoadbufferx_Detour.call(a, b, c, d, e),
-        lualib::get_lualib(),
+        lualib::get_lualib().with_context( ||
+            format!("\n\nIf you did not intend to launch with lovely, \
+                    ensure it is not present where it shouldn't be. \
+                    Lovely is present alongside \
+                    {}", args[0])
+        ).unwrap(),
         dump_all,
     );
     RUNTIME
