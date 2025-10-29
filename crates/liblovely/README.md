@@ -1,6 +1,6 @@
 # Liblovely
 
-This crate builds a static (.a) library designed to be bundled in other tools to inegrate lovely.
+This crate builds a static (.a) library designed to be bundled in other tools to integrate lovely.
 Unlike the other crates, this one does not do any work to resolve or patch lua functions. It is
 expected the code linking to it does this work.
 
@@ -103,7 +103,7 @@ If it's all working then you can generate the patch using:
 git diff > luajit.patch
 ```
 
-Remeber to copy it back to the liblovely folder.
+Remember to copy it back to the liblovely folder.
 
 If you messed up your working tree, you can run the following to reset your files the same as they would have been after the first time setup
 
