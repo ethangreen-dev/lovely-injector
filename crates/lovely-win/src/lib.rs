@@ -58,6 +58,8 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
             PCWSTR(WIN_TITLE.as_ptr()),
             MESSAGEBOX_STYLE(0),
         );
+
+        std::process::abort();
     }));
 
     let args = env::args().collect_vec();
