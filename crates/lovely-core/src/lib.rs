@@ -361,10 +361,11 @@ impl PatchTable {
         if fs::exists(&blacklist_file)? {
             let text = fs::read_to_string(blacklist_file).context("Could not read blacklist")?;
 
-            for line in text.lines() {
-                if line.is_empty() || line.starts_with("#") { continue; }
-                blacklist.insert(line.to_string());
-            }
+            blacklist.extend(
+                text.lines()
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(|line| line.to_string())
+            );
         } else {
             info!("No blacklist.txt in Mods/lovely.");
         }
@@ -384,7 +385,7 @@ impl PatchTable {
                 }
                 !blacklisted
             })
-            .map(|x| x.path())
+        .map(|x| x.path())
             .filter(|x| {
                 let ignore_file = x.join(".lovelyignore");
                 let dirname = x
