@@ -1,62 +1,101 @@
-name: Benchmark PR
+name: Benchmarks
 
 on:
+  push:
+    branches: [ master ]
   pull_request:
     types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: write
   contents: read
+  pull-requests: write
 
 jobs:
-  benchmark:
+  pr-benchmark:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust dependencies
+      - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
-      - name: Run benchmarks on base branch
-        run: |
-          git checkout ${{ github.event.pull_request.base.sha }}
-          export LOVELY_BENCH_MODE=short
-          cargo bench --bench patches -- --save-baseline base
-          mkdir -p /tmp/base-results
-          cp -r target/criterion /tmp/base-results/
-
-      - name: Run benchmarks on PR branch
-        run: |
-          git checkout ${{ github.event.pull_request.head.sha }}
-          export LOVELY_BENCH_MODE=short
-          cargo bench --bench patches -- --save-baseline pr
-
-      - name: Install Python dependencies
-        run: |
-          pip install matplotlib numpy plotly
-
-      - name: Generate comparison report
-        run: |
-          mkdir -p /tmp/charts
-          python crates/lovely-core/benches/scripts/compare_benchmarks.py \
-            /tmp/base-results/criterion \
-            target/criterion \
-            /tmp/report.md \
-            /tmp/charts
-
-      - name: Upload charts
-        uses: actions/upload-artifact@v4
+      - name: Restore benchmark baseline cache (from master)
+        uses: actions/cache@v4
         with:
-          name: benchmark-charts
-          path: /tmp/charts/*.png
+          path: ./bench-cache
+          key: benchmark-refs/heads/master-${{ runner.os }}
+          restore-keys: |
+            benchmark-refs/heads/master-
 
-      - name: Post comment with results
-        uses: actions/github-script@v7
+      - name: Run Criterion benchmarks (long)
+        env:
+          LOVELY_BENCH_MODE: long
+        run: |
+          cargo bench --bench patches -- --output-format bencher | tee bench-output.txt
+
+      - name: Compare against baseline and comment
+        uses: benchmark-action/github-action-benchmark@v1
         with:
-          script: |
-            // Script goes here?
+          name: lovely-core patches
+          tool: 'cargo'
+          output-file-path: bench-output.txt
+          external-data-json-path: ./bench-cache/benchmark-data.json
+          save-data-file: false
+          comment-always: true
+          summary-always: true
+          fail-on-alert: false
+          # Adjust if needed, 150% might not be sensitive enough?
+          alert-threshold: '150%'
+
+  publish-benchmark:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      deployments: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Prepare/update baseline cache key
+        uses: actions/cache@v4
+        with:
+          path: ./bench-cache
+          key: benchmark-${{ github.ref }}-${{ github.sha }}-${{ runner.os }}
+          restore-keys: |
+            benchmark-${{ github.ref }}-
+            benchmark-refs/heads/master-
+
+      - name: Run Criterion benchmarks (long)
+        env:
+          LOVELY_BENCH_MODE: long
+        run: |
+          cargo bench --bench patches -- --output-format bencher | tee bench-output.txt
+
+      - name: Publish results to GitHub Pages
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: lovely-core patches
+          tool: 'cargo'
+          output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          save-data-file: true
+          external-data-json-path: ./bench-cache/benchmark-data.json
+          # Keep charts concise
+          max-items-in-chart: 50
