@@ -53,7 +53,7 @@ unsafe extern "C" fn lua_return_values(state: *mut LuaState) -> c_int {
 
 // HACK: Panics if not inlined?
 #[inline(always)]
-pub unsafe fn check_lua_string(state: *mut LuaState, index: c_int) -> String {
+pub(crate) unsafe fn check_lua_string(state: *mut LuaState, index: c_int) -> String {
     let mut str_len = 0usize;
     let arg_str = lual_checklstring(state, index, &mut str_len);
 
@@ -109,7 +109,7 @@ impl LuaLib {
 }
 
 // TODO: implement all lua methods on this(?)
-pub trait LuaStateTrait {
+pub(crate) trait LuaStateTrait {
     unsafe fn push<P: Pushable>(self, obj: P);
     unsafe fn push_closure(self, func: LuaFunc, vals: c_int);
 }
@@ -185,7 +185,7 @@ pub struct LuaTable {
 }
 
 impl LuaTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         LuaTable {
             var: vec![],
         }
@@ -294,7 +294,7 @@ pub unsafe fn load_module<F: Fn(*mut LuaState, *const u8, usize, *const u8, *con
 // Checks if a module is in the preload table. Used to check if lovely was already initalized
 // # Safety
 // Uses the native lua API. I'm also pretty sure I it bikes without a helmet.
-pub unsafe fn is_module_preloaded(state: *mut LuaState, name: &str) -> bool {
+pub(crate) unsafe fn is_module_preloaded(state: *mut LuaState, name: &str) -> bool {
     let name_cstr = CString::new(name).unwrap();
     let stack_top = lua_gettop(state);
     lua_getfield(state, LUA_GLOBALSINDEX, c"package".as_ptr());
@@ -304,7 +304,7 @@ pub unsafe fn is_module_preloaded(state: *mut LuaState, name: &str) -> bool {
     let res = lua_type(state, -1) != LUA_TNIL;
 
     lua_settop(state, stack_top);
-    return res;
+    res
 }
 
 /// An override print function, copied piecemeal from the Lua 5.1 source, but in Rust.
