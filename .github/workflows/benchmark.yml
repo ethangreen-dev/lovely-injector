@@ -47,6 +47,7 @@ jobs:
           name: lovely-core patches
           tool: 'cargo'
           output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           external-data-json-path: ./bench-cache/benchmark-data.json
           save-data-file: false
           comment-always: true
