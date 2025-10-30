@@ -93,8 +93,8 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
     let handle = LoadLibraryW(w!("lua51.dll")).unwrap();
     let proc = GetProcAddress(handle, s!("luaL_loadbufferx")).unwrap();
     let fn_target = std::mem::transmute::<
-        _,
-        unsafe extern "C" fn(*mut c_void, *const u8, usize, *const u8, *const u8) -> u32,
+        unsafe extern "system" fn() -> isize, 
+        unsafe extern "C" fn(*mut std::ffi::c_void, *const u8, usize, *const u8, *const u8) -> u32
     >(proc);
 
     LuaLoadbufferx_Detour
@@ -107,9 +107,9 @@ unsafe extern "system" fn DllMain(_: HINSTANCE, reason: u32, _: *const c_void) -
 
     let proc = GetProcAddress(handle, s!("luaL_loadbuffer")).unwrap();
     let fn_target = std::mem::transmute::<
-        _,
-        unsafe extern "C" fn(*mut c_void, *const u8, usize, *const u8) -> u32,
-        >(proc);
+        unsafe extern "system" fn() -> isize, 
+        unsafe extern "C" fn(*mut std::ffi::c_void, *const u8, usize, *const u8) -> u32
+    >(proc);
 
     LuaLoadbuffer_Detour
         .initialize(fn_target, |a, b, c, d| {

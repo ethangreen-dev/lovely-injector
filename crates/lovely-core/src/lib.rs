@@ -60,8 +60,8 @@ unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
     let lovely = &RUNTIME.get().unwrap();
     let vars = lovely.lua_vars.read().unwrap();
     let val = vars.get(&key);
-    if val.is_some() {
-        state.push(val.unwrap());
+    if let Some(val) = val {
+        state.push(val);
         return 1;
     }
     0
@@ -81,8 +81,8 @@ unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
     let lovely = &RUNTIME.get().unwrap();
     let mut vars = lovely.lua_vars.write().unwrap();
     let val = vars.remove(&key);
-    if val.is_some() {
-        state.push(val.unwrap());
+    if let Some(val) = val {
+        state.push(val);
         return 1;
     }
     0
