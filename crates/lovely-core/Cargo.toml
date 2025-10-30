@@ -21,3 +21,10 @@ serde_ignored = "0.1.10"
 itertools = "0.13.0"
 crop = "0.4.2"
 anyhow = "1.0.100"
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false }
+
+[[bench]]
+name = "patches"
+harness = false
