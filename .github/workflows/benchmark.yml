@@ -5,6 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -57,7 +58,8 @@ jobs:
           alert-threshold: '150%'
 
   publish-benchmark:
-    if: github.event_name == 'push'
+    # Run when pushing to master or when manually dispatched on master
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name == 'master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
