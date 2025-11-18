@@ -32,7 +32,7 @@ Note: You cannot run your game through Steam on Mac due to a bug within the Stea
 1. Install `love` using your distribution's package manager. This is `sudo pacman -S love` on SteamOS and Arch-based distros, and `sudo apt install love` on Ubuntu & Debian-based ones.
 2. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Linux. This will be `x86_64-unknown-linux-gnu.tar.gz`.
 3. Open the .tar.gz archive, copy `liblovely.so` and `run_lovely_linux.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-4. Put one or more mods into the mod directory (NOT the same as the game directory). If you are modding Balatro, this should be `~/.config/love/Mods`.
+4. Put one or more mods into the mod directory (NOT the same as the game directory). If you are modding Balatro, this should be `~/.local/share/love/Mods`.
 5. Run the game by executing `./run_lovely_linux.sh` in the terminal within the game directory (you can copy this file into the directory of choice).
 
 ## Patches
