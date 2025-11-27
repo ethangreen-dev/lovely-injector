@@ -66,48 +66,6 @@ impl CopyPatch {
             }
         }
 
-        // Merge the provided payloads into a single buffer. Each source path should
-        // be made absolute by the patch loader.
-        if let Some(ref sources) = self.sources {
-            for source in sources.iter() {
-                let contents = fs::read_to_string(source).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to read source file at {source:?} for copy patch from {}: {e:?}",
-                        path.display()
-                    )
-                });
-
-                // Append or prepend the patch's lines onto the provided buffer.
-                match self.position {
-                    CopyPosition::Prepend => {
-                        before += contents.len() + 1;
-                        rope.insert(0, "\n");
-                        rope.insert(0, &contents);
-                    }
-                    CopyPosition::Append => {
-                        after += contents.len() + 1;
-                        rope.insert(rope.byte_len(), "\n");
-                        rope.insert(rope.byte_len(), &contents);
-                    }
-                }
-            }
-        }
-
-        if let Some(ref payload) = self.payload {
-            match self.position {
-                CopyPosition::Prepend => {
-                    before += payload.len() + 1;
-                    rope.insert(0, "\n");
-                    rope.insert(0, payload);
-                }
-                CopyPosition::Append => {
-                    after += payload.len() + 1;
-                    rope.insert(rope.byte_len(), "\n");
-                    rope.insert(rope.byte_len(), payload);
-                }
-            }
-        }
-
        let mut byte_regions = Vec::new();
        if before != 0 {
            byte_regions.push(ByteRegion { start: 0, end: before, delta: before as isize });
