@@ -129,7 +129,7 @@ impl Lovely {
                     .to_string_lossy()
                     .replace(".", "_")
             };
-            dirs::config_dir().unwrap().join(game_name).join("Mods")
+            dirs::data_dir().unwrap().join(game_name).join("Mods")
         };
 
         let mut is_vanilla = false;
