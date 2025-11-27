@@ -2,21 +2,21 @@
 
 use core::slice;
 use std::collections::{HashMap, HashSet};
-use std::ffi::{CStr, c_int};
+use std::ffi::{c_int, CStr};
+use std::panic;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 use std::{env, fs};
-use std::sync::{RwLock, Arc, OnceLock};
-use std::panic;
 
 use log::*;
 
 use getargs::{Arg, Options};
 use itertools::Itertools;
-use patch::{Patch, ModulePatch};
+use patch::{ModulePatch, Patch};
 use regex_lite::Regex;
 
-use sys::{LuaLib, LuaState, LUA, LuaFunc, LuaStateTrait, check_lua_string};
+use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
 
 use crate::patch::Target;
 use crate::dump::{ByteDebugEntry, PatchDebug, write_dump};
@@ -25,7 +25,6 @@ pub mod chunk_vec_cursor;
 pub mod dump;
 pub mod log;
 pub mod patch;
-pub mod patch_table;
 pub mod sys;
 
 pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -33,7 +32,7 @@ pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 type LoadBuffer =
-dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+    dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
 
 unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
     let lovely = &RUNTIME.get().unwrap();
@@ -44,7 +43,7 @@ unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
             state.push(false);
             state.push(format!("{:?}", e));
             return 2;
-        },
+        }
     };
     let binding = Arc::clone(&lovely.patch_table);
     let mut patch_table = binding.write().unwrap();
@@ -100,7 +99,8 @@ impl Lovely {
     pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> &'static Self {
         assert!(RUNTIME.get().is_none());
 
-        LUA.set(lualib).unwrap_or_else(|_| panic!("LUA static var has already been set."));
+        LUA.set(lualib)
+            .unwrap_or_else(|_| panic!("LUA static var has already been set."));
 
         let start = Instant::now();
 
@@ -158,7 +158,6 @@ impl Lovely {
         if is_vanilla {
             info!("Running in vanilla mode");
 
-
             let lovely = Lovely {
                 mod_dir,
                 is_vanilla,
@@ -167,7 +166,9 @@ impl Lovely {
                 dump_all,
                 lua_vars,
             };
-            RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
+            RUNTIME
+                .set(lovely)
+                .unwrap_or_else(|_| panic!("Shit's erroring"));
             return RUNTIME.get().unwrap();
         }
 
@@ -224,7 +225,9 @@ impl Lovely {
             dump_all,
             lua_vars,
         };
-        RUNTIME.set(lovely).unwrap_or_else(|_| panic!("Shit's erroring"));
+        RUNTIME
+            .set(lovely)
+            .unwrap_or_else(|_| panic!("Shit's erroring"));
         RUNTIME.get().unwrap()
     }
 
@@ -262,7 +265,7 @@ impl Lovely {
                         Patch::Module(patch) => Some((patch, prio, path)),
                         _ => None,
                     })
-                .filter(|(x, _, _)| !x.load_now)
+                    .filter(|(x, _, _)| !x.load_now)
                     .sorted_by_key(|(_, &prio, _)| prio)
                     .map(|(x, _, path)| (x, path))
                     .collect();
@@ -322,8 +325,8 @@ impl Lovely {
     }
 }
 
-// Import PatchTable from the new module
-use crate::patch_table::PatchTable;
+// Import PatchTable from the new location
+use crate::patch::table::PatchTable;
 
 unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf_name = check_lua_string(lua_state, 1);
@@ -354,14 +357,11 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     }
 }
 
-
-
-
 impl Target {
     pub fn can_apply(&self, target: &str) -> bool {
         match self {
             Self::Single(str) => str == target,
-            Self::Multi(strs) => strs.iter().any(|x| x == target)
+            Self::Multi(strs) => strs.iter().any(|x| x == target),
         }
     }
 
@@ -369,7 +369,7 @@ impl Target {
         match self {
             Self::Single(str) => {
                 targets.insert(str.clone());
-            },
+            }
             Self::Multi(strs) => {
                 for target in strs.iter() {
                     targets.insert(target.clone());

@@ -1,13 +1,12 @@
 use std::{
     ffi::CString,
-    fs,
     path::{Path, PathBuf},
     ptr,
 };
 
 use crate::sys::{self, lua_identity_closure, lua_err_identity_closure, LuaState, LuaStateTrait};
-use serde::{Deserialize, Serialize};
 use crate::RUNTIME;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModulePatch {
@@ -21,14 +20,19 @@ pub struct ModulePatch {
     // If enabled, evaluate the module immediately upon loading it
     #[serde(default)]
     pub load_now: bool,
-    // Used for the display name of the source. Is the relative path to the source.
+
+    // Used for display name of the source. Is the relative path.
     #[serde(skip)]
     pub display_source: String,
+
+    // Preloaded at load time
+    #[serde(skip)]
+    pub content: String,
 }
 
 impl ModulePatch {
-    /// Apply a module patch by loading the input file(s) into memory, calling lual_loadbufferx
-    /// on them, and then injecting them into the global `package.preload` table.
+    /// Apply a module patch by loading the input file(s) into memory and injecting them into
+    /// the global `package.preload` table.
     ///
     /// # Safety
     /// This function is unsafe as it interfaces directly with a series of dynamically loaded
@@ -44,14 +48,7 @@ impl ModulePatch {
             return Ok(false);
         }
 
-        // Read the source file in as [u8]
-        let source = fs::read(&self.source).unwrap_or_else(|e| {
-            panic!(
-                "Failed to read module source file for module patch from {} at {:?}: {e:?}",
-                path.display(),
-                &self.source
-            )
-        });
+        let source = self.content.as_bytes();
         let source_len = source.len();
 
         let name = format!("=[lovely {} \"{}\"]", &self.name, &self.display_source);
@@ -66,7 +63,6 @@ impl ModulePatch {
         let field_index = sys::lua_gettop(state);
 
         // Load the buffer and execute it via lua_pcall, pushing the result to the top of the stack.
-        
         let lovely = &RUNTIME.get().unwrap();
 
         let return_code = lovely.apply_buffer_patches(
