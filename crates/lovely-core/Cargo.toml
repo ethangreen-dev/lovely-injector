@@ -22,3 +22,6 @@ itertools = "0.13.0"
 crop = "0.4.2"
 anyhow = "1.0.100"
 zip = "6.0.0"
+
+[dev-dependencies]
+tempfile = "3"
