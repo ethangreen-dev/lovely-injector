@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use regex_cursor::Input;
 use regex_cursor::engines::meta::Regex;
-use regex_cursor::regex_automata::util::syntax;
 use regex_cursor::regex_automata::util::interpolate;
+use regex_cursor::regex_automata::util::syntax;
+use regex_cursor::Input;
 
-use itertools::Itertools;
 use crop::Rope;
-use serde::{Serialize, Deserialize};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
 
@@ -44,7 +44,7 @@ pub struct RegexPatch {
     pub verbose: bool,
 
     // Currently unused.
-    pub name: Option<String>
+    pub name: Option<String>,
 }
 
 impl RegexPatch {
@@ -56,21 +56,37 @@ impl RegexPatch {
         let input = Input::new(rope.into_cursor());
         let re = Regex::builder()
             .syntax(
-                 syntax::Config::new()
+                syntax::Config::new()
                     .multi_line(true)
                     .crlf(true)
-                    .ignore_whitespace(self.verbose)
+                    .ignore_whitespace(self.verbose),
             )
             .build(&self.pattern)
-            .unwrap_or_else(|e| panic!("Failed to compile Regex '{}' for regex patch from {}: {e:?}", path.display(), self.pattern));
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to compile Regex '{}' for regex patch from {}: {e:?}",
+                    path.display(),
+                    self.pattern
+                )
+            });
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::warn!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
+            log::warn!(
+                "Regex '{}' on target '{target}' for regex patch from {} resulted in no matches",
+                self.pattern.escape_debug(),
+                path.display()
+            );
             return false;
         }
         if let Some(times) = self.times {
-            fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize, path: &Path) {
+            fn warn_regex_mismatch(
+                pattern: &str,
+                target: &str,
+                found_matches: usize,
+                wanted_matches: usize,
+                path: &Path,
+            ) {
                 let warn_msg: String = if pattern.lines().count() > 1 {
                     format!("Regex '''\n{pattern}''' on target '{target}' for regex patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
@@ -119,16 +135,12 @@ impl RegexPatch {
                     let pid = groups.pattern().unwrap();
                     groups.group_info().to_index(pid, name)
                 },
-                &mut line_prepend
+                &mut line_prepend,
             );
 
             // Cleanup and convert the specified root capture to a span.
             let target_group = {
-                let group_name = self
-                    .root_capture
-                    .as_deref()
-                    .unwrap_or("0")
-                    .replace('$', "");
+                let group_name = self.root_capture.as_deref().unwrap_or("0").replace('$', "");
 
                 if let Ok(idx) = group_name.parse::<usize>() {
                     groups.get_group(idx)
@@ -144,9 +156,9 @@ impl RegexPatch {
             let target_start = (target_group.start as isize + delta) as usize;
             let target_end = (target_group.end as isize + delta) as usize;
 
-            let new_payload = std::format!("{}", 
-                self
-                    .payload
+            let new_payload = std::format!(
+                "{}",
+                self.payload
                     .split_inclusive('\n')
                     .format_with("", |x, f| f(&format_args!("{}{}", line_prepend, x)))
             );
@@ -171,12 +183,12 @@ impl RegexPatch {
                     let pid = groups.pattern().unwrap();
                     groups.group_info().to_index(pid, name)
                 },
-                &mut payload
+                &mut payload,
             );
 
-            // If left border of insertion is a wordchar -> non-wordchar 
-            // boundary and our patch starts with a wordchar, prepend space so 
-            // it doesn't unintentionally concatenate with characters to its 
+            // If left border of insertion is a wordchar -> non-wordchar
+            // boundary and our patch starts with a wordchar, prepend space so
+            // it doesn't unintentionally concatenate with characters to its
             // left to create a larger identifier.
             if payload.starts_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
                 let pre_pt = if let InsertPosition::After = self.position {
@@ -192,10 +204,10 @@ impl RegexPatch {
                 }
             }
 
-            // If right border of insertion is a non-wordchar -> wordchar 
-            // boundary and our patch ends with a wordchar, append space so 
-            // it doesn't unintentionally concatenate with characters to its 
-            // right to create a larger identifier.     
+            // If right border of insertion is a non-wordchar -> wordchar
+            // boundary and our patch ends with a wordchar, append space so
+            // it doesn't unintentionally concatenate with characters to its
+            // right to create a larger identifier.
             if payload.ends_with(|x: char| x.is_ascii_alphanumeric() || x == '_') {
                 let post_pt = if let InsertPosition::Before = self.position {
                     target_start

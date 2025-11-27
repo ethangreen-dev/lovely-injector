@@ -1,8 +1,8 @@
-use std::ptr;
-use std::sync::OnceLock;
-use std::slice;
-use std::ffi::{c_char, c_int, c_void, CString};
 use std::collections::VecDeque;
+use std::ffi::{c_char, c_int, c_void, CString};
+use std::ptr;
+use std::slice;
+use std::sync::OnceLock;
 
 use itertools::Itertools;
 use libloading::Library;
@@ -17,7 +17,8 @@ pub type LuaFunc = unsafe extern "C" fn(*mut LuaState) -> c_int;
 pub const LUA_GLOBALSINDEX: c_int = -10002;
 pub const LUA_TNIL: c_int = 0;
 pub const LUA_TBOOLEAN: c_int = 1;
-pub const fn lua_upvalueindex(i: c_int) -> c_int { // This is a macro in lua
+pub const fn lua_upvalueindex(i: c_int) -> c_int {
+    // This is a macro in lua
     LUA_GLOBALSINDEX - i
 }
 
@@ -126,7 +127,7 @@ impl LuaStateTrait for *mut LuaState {
 /// A trait which allows the implementing value to generically push its value onto the Lua stack.
 pub trait Pushable {
     /// Push this value onto the Lua stack.
-    /// 
+    ///
     /// # Safety
     /// Directly interacts with native Lua state.
     unsafe fn push(&self, state: *mut LuaState);
@@ -171,7 +172,7 @@ impl Pushable for LuaFunc {
     }
 }
 
-pub struct LuaVar<P: > 
+pub struct LuaVar<P>
 where
     P: std::ops::Deref,
     P::Target: Pushable,
@@ -186,9 +187,7 @@ pub struct LuaTable {
 
 impl LuaTable {
     pub(crate) fn new() -> Self {
-        LuaTable {
-            var: vec![],
-        }
+        LuaTable { var: vec![] }
     }
 
     /// Add a variable to this Lua module.
@@ -196,19 +195,14 @@ impl LuaTable {
         let name = format!("{name}\0");
         let mut var = self.var;
         let val = Box::new(val);
-        var.push(LuaVar {
-            name,
-            val,
-        });
+        var.push(LuaVar { name, val });
 
-        LuaTable {
-            var,
-        }
+        LuaTable { var }
     }
 }
 
 impl Pushable for LuaTable {
-        unsafe fn push(&self, state: *mut LuaState) {
+    unsafe fn push(&self, state: *mut LuaState) {
         // Create a table at the top of the stack.
         lua_createtable(state, 0, self.var.len().try_into().unwrap());
 
@@ -224,7 +218,7 @@ impl Pushable for LuaTable {
 }
 
 /// Commit this Lua module to native Lua state.
-/// 
+///
 /// # Safety
 /// Directly interacts and mutates native Lua state.
 pub unsafe fn preload_module<P: Pushable>(state: *mut LuaState, name: &'static str, value: P) {
