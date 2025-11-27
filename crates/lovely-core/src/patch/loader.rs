@@ -120,8 +120,15 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
             } else {
                 None
             }
-        })
-        .with_context(|| format!("No mod root found in zip {:?}", zip_file))?;
+        });
+    let mod_root = match mod_root {
+            Some(v) => v,
+            None => {
+                log::warn!("No mod root found in zip {:?}. This may happen if the mod does not contain any lovely patches (uses another loader)", zip_file);
+                return Ok((zip_file.to_path_buf(), Vec::new()));
+            },
+    };
+
 
     let lovely_toml_path = format!("{}lovely.toml", mod_root);
     let lovely_dir_prefix = format!("{}lovely/", mod_root);
