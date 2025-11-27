@@ -12,6 +12,7 @@ use walkdir::WalkDir;
 use zip::ZipArchive;
 
 /// Patch file with preloaded TOML content and referenced sources
+#[derive(Debug)]
 struct IntermediatePatch {
     pub path: PathBuf,
     pub content: String,
@@ -412,4 +413,222 @@ fn get_parent(path: &str) -> String {
         .map(|i| &path[..=i])
         .unwrap_or("")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+    use zip::write::SimpleFileOptions;
+    use zip::ZipWriter;
+
+    const PATCH_TOML: &str = r#"
+[manifest]
+version = "1.0.0"
+
+[[patches]]
+[patches.copy]
+target = "main.lua"
+position = "append"
+sources = ["inject.lua"]
+"#;
+
+    fn make_zip(temp: &TempDir, name: &str, files: &[(&str, &str)]) -> PathBuf {
+        let path = temp.path().join(name);
+        let mut zip = ZipWriter::new(fs::File::create(&path).unwrap());
+        for (name, content) in files {
+            zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(content.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn dir_patches_preloads_sources() {
+        let temp = TempDir::new().unwrap();
+        let mod_dir = temp.path().join("mod");
+        fs::create_dir_all(&mod_dir).unwrap();
+        fs::write(mod_dir.join("lovely.toml"), PATCH_TOML).unwrap();
+        fs::write(mod_dir.join("inject.lua"), "-- injected").unwrap();
+
+        let (_, patches) = get_dir_patches(&mod_dir).unwrap();
+
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- injected");
+    }
+
+    #[test]
+    fn zip_patches_preloads_sources() {
+        let temp = TempDir::new().unwrap();
+        let zip = make_zip(&temp, "mod.zip", &[
+            ("lovely.toml", PATCH_TOML),
+            ("inject.lua", "-- from zip"),
+        ]);
+
+        let (_, patches) = get_zip_patches(&zip).unwrap();
+
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- from zip");
+    }
+
+    #[test]
+    fn zip_nested_mod_root() {
+        let temp = TempDir::new().unwrap();
+        let zip = make_zip(&temp, "mod.zip", &[
+            ("Nested/lovely.toml", PATCH_TOML),
+            ("Nested/inject.lua", "-- nested"),
+        ]);
+
+        let (_, patches) = get_zip_patches(&zip).unwrap();
+
+        assert_eq!(patches.len(), 1);
+        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- nested");
+    }
+
+    #[test]
+    fn zip_no_mod_root_errors() {
+        let temp = TempDir::new().unwrap();
+        let zip = make_zip(&temp, "empty.zip", &[("random.txt", "")]);
+
+        assert!(get_zip_patches(&zip).is_err());
+    }
+
+    #[test]
+    fn blacklist_excludes_dir_and_zip() {
+        let temp = TempDir::new().unwrap();
+        let mods = temp.path();
+        fs::create_dir_all(mods.join("lovely")).unwrap();
+        fs::write(
+            mods.join("lovely/blacklist.txt"),
+            "blocked_dir\nblocked.zip\n# comment\n\n",
+        ).unwrap();
+
+        // Allowed dir mod
+        let allowed = mods.join("allowed");
+        fs::create_dir_all(&allowed).unwrap();
+        fs::write(allowed.join("lovely.toml"), PATCH_TOML).unwrap();
+        fs::write(allowed.join("inject.lua"), "").unwrap();
+
+        // Blocked dir mod
+        let blocked = mods.join("blocked_dir");
+        fs::create_dir_all(&blocked).unwrap();
+        fs::write(blocked.join("lovely.toml"), PATCH_TOML).unwrap();
+        fs::write(blocked.join("inject.lua"), "").unwrap();
+
+        // Blocked zip mod
+        make_zip(&temp, "blocked.zip", &[
+            ("lovely.toml", PATCH_TOML),
+            ("inject.lua", ""),
+        ]);
+        fs::rename(temp.path().join("blocked.zip"), mods.join("blocked.zip")).unwrap();
+
+        let patches = load_patches_new(mods).unwrap();
+
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].2.to_string_lossy().contains("allowed"));
+    }
+
+    #[test]
+    fn lovelyignore_excludes_mod() {
+        let temp = TempDir::new().unwrap();
+        let mods = temp.path();
+        fs::create_dir_all(mods.join("lovely")).unwrap();
+
+        let ignored = mods.join("ignored");
+        fs::create_dir_all(&ignored).unwrap();
+        fs::write(ignored.join("lovely.toml"), PATCH_TOML).unwrap();
+        fs::write(ignored.join("inject.lua"), "").unwrap();
+        fs::write(ignored.join(".lovelyignore"), "").unwrap();
+
+        let patches = load_patches_new(mods).unwrap();
+        assert!(patches.is_empty());
+    }
+
+    #[test]
+    fn missing_source_file_errors() {
+        let temp = TempDir::new().unwrap();
+        let mods = temp.path();
+        fs::create_dir_all(mods.join("lovely")).unwrap();
+
+        let m = mods.join("mod");
+        fs::create_dir_all(&m).unwrap();
+        fs::write(m.join("lovely.toml"), PATCH_TOML).unwrap();
+        // inject.lua intentionally missing
+
+        let result = load_patches_new(mods);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn lovely_subdir_tomls_loaded() {
+        let temp = TempDir::new().unwrap();
+        let mods = temp.path();
+        fs::create_dir_all(mods.join("lovely")).unwrap();
+
+        let m = mods.join("mod");
+        fs::create_dir_all(m.join("lovely")).unwrap();
+        fs::write(m.join("lovely/patch1.toml"), r#"
+[manifest]
+version = "1.0.0"
+
+[[patches]]
+[patches.copy]
+target = "a.lua"
+position = "append"
+payload = "-- a"
+"#).unwrap();
+        fs::write(m.join("lovely/patch2.toml"), r#"
+[manifest]
+version = "1.0.0"
+
+[[patches]]
+[patches.copy]
+target = "b.lua"
+position = "append"
+payload = "-- b"
+"#).unwrap();
+
+        let patches = load_patches_new(mods).unwrap();
+        assert_eq!(patches.len(), 2);
+    }
+
+    #[test]
+    fn process_patches_extracts_targets_and_vars() {
+        let temp = TempDir::new().unwrap();
+        let mods = temp.path();
+        fs::create_dir_all(mods.join("lovely")).unwrap();
+
+        let m = mods.join("mod");
+        fs::create_dir_all(&m).unwrap();
+        fs::write(m.join("lovely.toml"), r#"
+[manifest]
+version = "1.0.0"
+
+[vars]
+FOO = "bar"
+
+[[patches]]
+[patches.copy]
+target = "game.lua"
+position = "append"
+payload = "-- hi"
+"#).unwrap();
+
+        let raw = load_patches_new(mods).unwrap();
+        let (patches, targets, vars) = process_patches(raw);
+
+        assert_eq!(patches.len(), 1);
+        assert!(targets.contains("game.lua"));
+        assert_eq!(vars.get("FOO"), Some(&"bar".to_string()));
+    }
+
+    #[test]
+    fn get_parent_extracts_dir() {
+        assert_eq!(get_parent("a/b/c.txt"), "a/b/");
+        assert_eq!(get_parent("file.txt"), "");
+        assert_eq!(get_parent(""), "");
+    }
 }
