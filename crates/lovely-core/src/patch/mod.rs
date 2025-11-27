@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub use copy::CopyPatch;
 pub use module::ModulePatch;
@@ -8,9 +8,11 @@ pub use pattern::PatternPatch;
 pub use regex::RegexPatch;
 
 pub mod copy;
+pub mod loader;
 pub mod module;
 pub mod pattern;
 pub mod regex;
+pub mod table;
 pub mod vars;
 
 pub type Priority = i32;
@@ -35,7 +37,6 @@ pub struct PatchFile {
     // into injected source code as the *last* step in the patching process.
     #[serde(default)]
     pub vars: HashMap<String, String>,
-
     // // A table of arguments, read and parsed from the environment command line.
     // // Binds double-hyphenated argument names (--arg) to a value, with additional metadata
     // // available to produce help messages, set default values, and apply other behavior.
@@ -48,7 +49,7 @@ pub struct PatchFile {
 //     // An optional help string. This will be printed out in the calling console
 //     // (if available) when the --help argument is supplied.
 //     pub help: Option<String>,
-    
+
 //     // An optional default value. Not including a default value will cause Lovely
 //     // to panic if this argument is missing or could not be parsed.
 //     // Consider this to be both a "default value" and a "required" field, depending
@@ -57,7 +58,7 @@ pub struct PatchFile {
 
 //     // This field allows for a patch author to force lovely to parse incoming arguments
 //     // with the exact name that they are defined by.
-//     // This disables lovely's automatic underscore to hyphen conversion. 
+//     // This disables lovely's automatic underscore to hyphen conversion.
 //     #[serde(default)]
 //     pub name_override: bool,
 
@@ -83,7 +84,7 @@ pub enum Patch {
 #[serde(untagged)]
 pub enum Target {
     Single(String),
-    Multi(Vec<String>)
+    Multi(Vec<String>),
 }
 
 #[derive(Serialize, Deserialize, Debug)]

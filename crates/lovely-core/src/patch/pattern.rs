@@ -31,7 +31,7 @@ pub struct PatternPatch {
     pub overwrite: bool,
 
     // Currently unused.
-    pub name: Option<String>
+    pub name: Option<String>,
 }
 
 impl PatternPatch {

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use regex_lite::{Regex, Captures};
+use regex_lite::{Captures, Regex};
 
 /// Apply valid var interpolations to the provided line.
 /// Interpolation targets are of form {{lovely:VAR_NAME}}.
