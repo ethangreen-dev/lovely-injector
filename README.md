@@ -17,13 +17,14 @@ Lovely is a lua injector which embeds code into a [LÖVE 2d](https://love2d.org/
 
 ### Mac
 
-1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac. If you have an M-series CPU (M1, M2, etc.) then this will be `lovely-aarch64-apple-darwin.tar.gz`. If you have an Intel CPU then it will be `lovely-x86_64-apple-darwin.tar.gz`
-2. Open the .zip archive, copy `liblovely.dylib` and `run_lovely_macos.sh` into the game directory. You can navigate to the game's directory by right-clicking the game in Steam, hovering "Manage", and selecting "Browse local files".
-3. Put one or more mods into the Mac mod directory (NOT the same as the game directory). This should be `/Users/$USER/Library/Application Support/Balatro/Mods` where `$USER` is your username (if you are modding Balatro).\
-If you can't find this folder, try pressing `Shift-Command-.` (period) to show hidden files in Finder.
-4. Run the game by either dragging and dropping `run_lovely_macos.sh` onto `Terminal.app` in Applications > Utilities and then pressing enter, or by executing `sh run_lovely_macos.sh` in the terminal within the game directory.
+1. Download the [latest release](https://github.com/ethangreen-dev/lovely-injector/releases) for Mac.
+2. Open the archive, and click on `BalatroLovely.app`, this will raise a an alert saying "Apple could not verify “BalatroLovely.app'". Click "Done"
+3. Open `System Preferences`, then `Security & Privacy`, and find `"BalatroLovely.app" was blocked to protect your Mac`. Click "Open Anyway" to allow the app to run.
+4. This will open a new dialog, press `Open Anyway` on this dialog as well.
+5. It will then as for your password or fingerprint to allow the app to run. Enter your password or use your fingerprint.
+6. Re-click on `BalatroLovely.app` to run the modded game.
 
-Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely_macos.sh` script.
+Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `BalatroLovely.app` app bundle. You are able to add this app bundle to your Steam library as a non-Steam game, and run it from there.
 
 **Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
 

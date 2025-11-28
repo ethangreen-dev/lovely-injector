@@ -76,8 +76,7 @@ jobs:
     strategy:
       matrix:
         target:
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
+          - apple-darwin
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -88,7 +87,7 @@ jobs:
       - name: Setup toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
-          target: ${{ matrix.target }}
+          targets: aarch64-${{ matrix.target }}, x86_64-${{ matrix.target }}
 
       - name: Install Mac SDK
         run: |
@@ -100,15 +99,30 @@ jobs:
         run: |
           pip3 install ziglang==0.13.0.post1 cargo-zigbuild
 
-      - name: Build
-        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-unix --release
-
-      - name: Compress tar.gz
+      - name: Install lipo for universal binary creation
         run: |
-          cp ./crates/lovely-unix/run_lovely_macos.sh ./target/${{ matrix.target }}/release/
-          cd ./target/${{ matrix.target }}/release/
-          tar czfv lovely-${{ matrix.target }}.tar.gz liblovely.dylib run_lovely_macos.sh
-          mv "lovely-${{ matrix.target }}.tar.gz" ${{ github.workspace }}
+          sudo apt install golang-go
+          go install github.com/konoui/lipo@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+    
+      - name: Build arm64
+        run: cargo zigbuild --target aarch64-${{ matrix.target }} --package lovely-unix --release
+
+      - name: Build x86_64
+        run: cargo zigbuild --target x86_64-${{ matrix.target }} --package lovely-unix --release
+
+      - name: Make macOS app bundle
+        run: |
+          mkdir -p BalatroLovely.app/Contents/Macos
+          cp ./crates/lovely-unix/run_lovely_macos.sh ./BalatroLovely.app/Contents/Macos
+          mkdir -p BalatroLovely.app/Contents/Resources
+          lipo -create -output BalatroLovely.app/Contents/Resources/liblovely.dylib \
+            ./target/aarch64-${{ matrix.target }}/release/liblovely.dylib \
+            ./target/x86_64-${{ matrix.target }}/release/liblovely.dylib
+          cp ./crates/lovely-unix/Info.plist ./BalatroLovely.app/Contents/
+          echo "APPLLoVe" > ./BalatroLovely.app/Contents/PkgInfo
+
+          tar czfv lovely-${{ matrix.target }}.tar.gz BalatroLovely.app
 
       - name: Submit build artifact
         env:
