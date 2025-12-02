@@ -20,7 +20,7 @@ impl<'a> regex_cursor::Cursor for ChunkVecCursor<'a> {
 
     fn advance(&mut self) -> bool {
         if self.idx + 1 >= self.chunks.len() {
-            return false
+            return false;
         }
         self.offset += self.chunks[self.idx].len();
         self.idx += 1;
@@ -29,7 +29,7 @@ impl<'a> regex_cursor::Cursor for ChunkVecCursor<'a> {
 
     fn backtrack(&mut self) -> bool {
         if self.idx == 0 {
-            return false
+            return false;
         }
         self.idx -= 1;
         self.offset -= self.chunks[self.idx].len();
@@ -47,7 +47,7 @@ impl<'a> regex_cursor::Cursor for ChunkVecCursor<'a> {
 
 impl<'a> IntoCursor for &'a crop::Rope {
     type Cursor = ChunkVecCursor<'a>;
-    
+
     fn into_cursor(self) -> Self::Cursor {
         ChunkVecCursor {
             chunks: self.chunks().collect_vec(),
@@ -60,7 +60,7 @@ impl<'a> IntoCursor for &'a crop::Rope {
 
 impl<'a> IntoCursor for crop::RopeSlice<'a> {
     type Cursor = ChunkVecCursor<'a>;
-    
+
     fn into_cursor(self) -> Self::Cursor {
         ChunkVecCursor {
             chunks: self.chunks().collect_vec(),
