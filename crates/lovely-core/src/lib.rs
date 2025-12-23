@@ -24,8 +24,10 @@ use regex_lite::Regex;
 use sys::{LuaLib, LuaState, LuaTable, LUA, LuaFunc, LuaStateTrait, check_lua_string, preload_module};
 
 use crate::patch::Target;
+use crate::dump::{PatchDebug, write_dump};
 
 pub mod chunk_vec_cursor;
+pub mod dump;
 pub mod log;
 pub mod patch;
 pub mod sys;
@@ -200,11 +202,16 @@ impl Lovely {
         info!("Using mod directory at {mod_dir:?}");
         let patch_table = Arc::new(RwLock::new(PatchTable::load(&mod_dir).unwrap()));
 
-        let dump_dir = mod_dir.join("lovely").join("dump");
-        if dump_dir.is_dir() {
-            info!("Cleaning up dumps directory at {dump_dir:?}");
+        // Clean up dump dirs
+        for dir_name in ["dump", "game-dump"] {
+            let dump_dir = mod_dir.join("lovely").join(dir_name);
+            if !dump_dir.is_dir() {
+                continue;
+            }
+
+            info!("Cleaning up {dir_name} directory at {dump_dir:?}");
             fs::remove_dir_all(&dump_dir).unwrap_or_else(|e| {
-                panic!("Failed to recursively delete dumps directory at {dump_dir:?}: {e:?}")
+                panic!("Failed to recursively delete {dir_name} directory at {dump_dir:?}: {e:?}")
             });
         }
 
@@ -290,9 +297,6 @@ impl Lovely {
             panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}")
         });
 
-        // Apply patches onto this buffer.
-        let patched = patch_table.apply_patches(name, buf_str, state);
-
         let regex = Regex::new(r#"=\[(\w+)(?: (\S+))? "([^"]+)"\]"#).unwrap();
         let pretty_name = if let Some(capture) = regex.captures(name) {
             let f1 = capture.get(1).map_or("", |x| x.as_str());
@@ -304,30 +308,11 @@ impl Lovely {
             name.replace("@", "")
         };
 
-        let patch_dump = self.mod_dir.join("lovely").join("dump").join(&pretty_name);
+        // Apply patches onto this buffer.
+        let (patched, debug) = patch_table.apply_patches(name, buf_str, state);
 
-        // Check to see if the dump file already exists to fix a weird panic specific to Wine.
-        if pretty_name.chars().count() <= 100 && !fs::exists(&patch_dump).unwrap() {
-            let dump_parent = patch_dump.parent().unwrap();
-            if !dump_parent.is_dir() {
-                if let Err(e) = fs::create_dir_all(dump_parent) {
-                    error!("Failed to create directory at {dump_parent:?}: {e:?}");
-                }
-            }
-
-            // Write the patched file to the dump, moving on if an error occurs.
-            if let Err(e) = fs::write(&patch_dump, &patched) {
-                error!("Failed to write patched buffer to {patch_dump:?}: {e:?}");
-            }
-
-            let mut patch_meta = patch_dump;
-            patch_meta.set_extension("txt");
-
-            // HACK: Replace the @ symbol on the fly because that's what devs are used to.
-            if let Err(e) = fs::write(&patch_meta, name.replacen("@", "", 1)) {
-                error!("Failed to write patch metadata to {patch_meta:?}: {e:?}");
-            };
-        }
+        write_dump(&self.mod_dir, "game-dump", &pretty_name, &patched, &PatchDebug::new(name));
+        write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
 
         (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
     }
@@ -553,6 +538,7 @@ impl PatchTable {
     }
 
     /// Apply one or more patches onto the target's buffer.
+    /// Returns the patched content and debug info.
     /// # Safety
     /// Unsafe due to internal unchecked usages of raw lua state.
     pub unsafe fn apply_patches(
@@ -560,8 +546,10 @@ impl PatchTable {
         target: &str,
         buffer: &str,
         lua_state: *mut LuaState,
-    ) -> String {
+    ) -> (String, PatchDebug) {
         let target = target.strip_prefix('@').unwrap_or(target);
+
+        let mut debug = PatchDebug::new(target);
 
         let module_patches = self
             .patches
@@ -624,8 +612,9 @@ impl PatchTable {
                 _ => unreachable!(),
             };
 
-            if result {
+            if let Some(entry) = result {
                 patch_count += 1;
+                debug.entries.push(entry);
             }
         }
 
@@ -649,7 +638,7 @@ impl PatchTable {
             info!("Applied {patch_count} patches to '{target}'");
         }
 
-        patched
+        (patched, debug)
     }
 }
 
@@ -659,7 +648,8 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let result = panic::catch_unwind(|| {
         let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
         if binding.needs_patching(&buf_name) {
-            lua_state.push(binding.apply_patches(&buf_name, &buf, lua_state));
+            let (patched, _debug) = binding.apply_patches(&buf_name, &buf, lua_state);
+            lua_state.push(patched);
         } else {
             lua_state.push(buf)
         }
