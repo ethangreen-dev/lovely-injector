@@ -5,6 +5,8 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
+use crate::dump::{PatchDebugEntry, PatchRegion, PatchSource};
+
 use super::{InsertPosition, Target};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,10 +36,10 @@ pub struct PatternPatch {
 
 impl PatternPatch {
     /// Apply the pattern patch onto the rope.
-    /// The return value will be `true` if the rope was modified.
-    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
+    /// Returns `Some(PatchDebugEntry)` if the rope was modified, `None` otherwise.
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<PatchDebugEntry> {
         if !self.target.can_apply(target) {
-            return false;
+            return None;
         }
 
         let wm_lines = self
@@ -51,7 +53,7 @@ impl PatternPatch {
                 "Pattern on target '{target}' for pattern patch from {} has no lines",
                 path.display()
             );
-            return false;
+            return None;
         }
         let wm_lines_len = wm_lines.len();
 
@@ -89,7 +91,7 @@ impl PatternPatch {
                 self.pattern.escape_debug(),
                 path.display(),
             );
-            return false;
+            return None;
         }
         if let Some(times) = self.times {
             fn warn_pattern_mismatch(
@@ -121,9 +123,13 @@ impl PatternPatch {
         // Track the +/- index offset caused by previous line injections.
         let mut line_delta: isize = 0;
 
+        // Collect debug regions
+        let mut regions = Vec::new();
+
         for (line_idx, indent) in matches {
-            let start = rope.byte_of_line(line_idx.saturating_add_signed(line_delta));
-            let end = rope.byte_of_line(line_idx.saturating_add_signed(line_delta) + wm_lines_len);
+            let adjusted_line_idx = line_idx.saturating_add_signed(line_delta);
+            let start = rope.byte_of_line(adjusted_line_idx);
+            let end = rope.byte_of_line(adjusted_line_idx + wm_lines_len);
 
             let mut payload = self
                 .payload
@@ -135,24 +141,47 @@ impl PatternPatch {
             }
             let payload_lines = payload.lines().count() as isize;
 
+            // Calculate the region that will be affected (1-based line numbers)
+            let region_start = adjusted_line_idx + 1;
+            let region_end;
+
             match self.position {
                 InsertPosition::Before => {
+                    region_end = region_start + payload_lines as usize - 1;
                     line_delta += payload_lines;
                     rope.insert(start, &payload);
                 }
                 InsertPosition::After => {
+                    let after_start = adjusted_line_idx + wm_lines_len + 1;
+                    regions.push(PatchRegion {
+                        start_line: after_start,
+                        end_line: after_start + payload_lines as usize - 1,
+                    });
                     line_delta += payload_lines;
                     rope.insert(end, &payload);
+                    continue;
                 }
                 InsertPosition::At => {
+                    region_end = region_start + payload_lines as usize - 1;
                     line_delta += payload_lines;
                     line_delta -= wm_lines_len as isize;
                     rope.delete(start..end);
                     rope.insert(start, &payload);
                 }
             };
+
+            regions.push(PatchRegion {
+                start_line: region_start,
+                end_line: region_end,
+            });
         }
 
-        true
+        Some(PatchDebugEntry {
+            patch_source: PatchSource {
+                file: path.display().to_string(),
+                pattern: self.pattern.clone(),
+            },
+            regions,
+        })
     }
 }

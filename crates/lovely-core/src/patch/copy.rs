@@ -33,9 +33,7 @@ impl CopyPatch {
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
         if !self.target.can_apply(target) {
             return false;
-        }
-
-        
+        } 
 
         // Merge the provided payloads into a single buffer. Each source path should
         // be made absolute by the patch loader.
