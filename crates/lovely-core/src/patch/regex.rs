@@ -91,9 +91,11 @@ impl RegexPatch {
             }
         }
 
-        // This is our running byte offset. We use this to ensure that byte references
-        // within the capture group remain valid even after the rope has been mutated.
+        // Running byte offset to keep byte references valid after rope mutations.
         let mut delta = 0_isize;
+
+        // Track +/- line offset caused by previous patch applications.
+        let mut line_delta = 0_isize;
 
         // Collect debug regions
         let mut regions = Vec::new();
@@ -214,15 +216,16 @@ impl RegexPatch {
                 }
             }
 
-            // Calculate the line number for the region (1-based)
-            let start_line = rope.line_of_byte(target_start) + 1;
+            // Calculate region line numbers (1-based), adjusted for previous modifications.
+            let start_line = 1 + (rope.line_of_byte(target_start) as isize + line_delta) as usize;
             let payload_lines = payload.lines().count();
+            let payload_newlines = payload.matches('\n').count() as isize;
 
             match self.position {
                 InsertPosition::Before => {
                     rope.insert(target_start, &payload);
-                    let new_len = payload.len();
-                    delta += new_len as isize;
+                    delta += payload.len() as isize;
+                    line_delta += payload_newlines;
 
                     regions.push(PatchRegion {
                         start_line,
@@ -231,22 +234,25 @@ impl RegexPatch {
                 }
                 InsertPosition::After => {
                     rope.insert(target_end, &payload);
-                    let new_len = payload.len();
-                    delta += new_len as isize;
+                    delta += payload.len() as isize;
 
-                    let after_line = rope.line_of_byte(target_end) + 1;
+                    let after_line = (rope.line_of_byte(target_end) as isize + 1 + line_delta) as usize;
+                    line_delta += payload_newlines;
+
                     regions.push(PatchRegion {
                         start_line: after_line,
                         end_line: after_line + payload_lines.saturating_sub(1),
                     });
                 }
                 InsertPosition::At => {
+                    let removed_newlines = rope.byte_slice(target_start..target_end).to_string().matches('\n').count() as isize;
+
                     rope.delete(target_start..target_end);
                     rope.insert(target_start, &payload);
                     let old_len = target_group.end - target_group.start;
-                    let new_len = payload.len();
                     delta -= old_len as isize;
-                    delta += new_len as isize;
+                    delta += payload.len() as isize;
+                    line_delta += payload_newlines - removed_newlines;
 
                     regions.push(PatchRegion {
                         start_line,
