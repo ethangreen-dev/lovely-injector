@@ -141,7 +141,7 @@ impl PatternPatch {
             }
             let payload_lines = payload.lines().count() as isize;
 
-            // Calculate the region that will be affected (1-based line numbers)
+            // Calculate the region that will be affected
             let region_start = adjusted_line_idx + 1;
             let region_end;
 

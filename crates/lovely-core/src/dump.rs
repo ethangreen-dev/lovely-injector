@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-// Patch debug info. Dumped during patch application to the dump directory as a "sidecar".
+// Sidecar debug entry. Written to the dump dir.
 #[derive(Serialize, Debug)]
 pub struct PatchDebugEntry {
     pub patch_source: PatchSource,
