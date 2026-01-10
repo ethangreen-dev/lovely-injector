@@ -10,7 +10,7 @@ pub struct PatchDebugEntry {
     pub regions: Vec<PatchRegion>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct PatchSource {
     pub file: String,
     pub pattern: String,
@@ -20,6 +20,39 @@ pub struct PatchSource {
 pub struct PatchRegion {
     pub start_line: usize,
     pub end_line: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ByteRegion {
+    pub start: usize,
+    pub end: usize,
+    pub delta: isize,
+}
+
+impl ByteRegion {
+    /// Adjust this region if an edit occurred at or before it.
+    pub fn adjust(&mut self, edit_pos: usize, delta: isize) {
+        if self.start >= edit_pos {
+            self.start = (self.start as isize + delta) as usize;
+            self.end = (self.end as isize + delta) as usize;
+        }
+    }
+}
+
+/// Dirty byte-based debug entry.
+#[derive(Debug)]
+pub struct ByteDebugEntry {
+    pub patch_source: PatchSource,
+    pub regions: Vec<ByteRegion>,
+}
+
+impl ByteDebugEntry {
+    /// Adjust all regions in this entry based on the edit that occurred.
+    pub fn adjust(&mut self, edit_pos: usize, delta: isize) {
+        for region in &mut self.regions {
+            region.adjust(edit_pos, delta);
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -33,6 +66,29 @@ impl PatchDebug {
         Self {
             buffer_name: buffer_name.to_string(),
             entries: Vec::new(),
+        }
+    }
+
+    /// Convert from byte-based to line-based.
+    pub fn from_byte_entries(buffer_name: &str, byte_entries: Vec<ByteDebugEntry>, rope: &crop::Rope) -> Self {
+        let entries = byte_entries
+            .into_iter()
+            .map(|entry| PatchDebugEntry {
+                patch_source: entry.patch_source,
+                regions: entry
+                    .regions
+                    .into_iter()
+                    .map(|r| PatchRegion {
+                        start_line: rope.line_of_byte(r.start) + 1,
+                        end_line: rope.line_of_byte(r.end.saturating_sub(1)) + 1,
+                    })
+                    .collect(),
+            })
+            .collect();
+
+        Self {
+            buffer_name: buffer_name.to_string(),
+            entries,
         }
     }
 }

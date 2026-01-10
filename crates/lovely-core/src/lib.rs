@@ -24,7 +24,7 @@ use regex_lite::Regex;
 use sys::{LuaLib, LuaState, LuaTable, LUA, LuaFunc, LuaStateTrait, check_lua_string, preload_module};
 
 use crate::patch::Target;
-use crate::dump::{PatchDebug, write_dump};
+use crate::dump::{ByteDebugEntry, PatchDebug, write_dump};
 
 pub mod chunk_vec_cursor;
 pub mod dump;
@@ -549,8 +549,6 @@ impl PatchTable {
     ) -> (String, PatchDebug) {
         let target = target.strip_prefix('@').unwrap_or(target);
 
-        let mut debug = PatchDebug::new(target);
-
         let module_patches = self
             .patches
             .iter()
@@ -589,6 +587,9 @@ impl PatchTable {
         let mut patch_count = 0;
         let mut rope = Rope::from(buffer);
 
+        // Collect byte-based debug entries, adjust after each patch.
+        let mut byte_entries: Vec<ByteDebugEntry> = Vec::new();
+
         // Apply module injection patches.
         for (patch, path) in module_patches {
             let result = unsafe { patch.apply(target, lua_state, path) };
@@ -613,10 +614,20 @@ impl PatchTable {
             };
 
             if let Some(entry) = result {
+                // Adjust all previous entries based on this patch's edits.
+                for region in &entry.regions {
+                    for prev_entry in &mut byte_entries {
+                        prev_entry.adjust(region.start, region.delta);
+                    }
+                }
+
                 patch_count += 1;
-                debug.entries.push(entry);
+                byte_entries.push(entry);
             }
         }
+
+        // Convert byte entries to line-based debug info using final rope state.
+        let debug = PatchDebug::from_byte_entries(target, byte_entries, &rope);
 
         let mut patched_lines = {
             let inner = rope.to_string();

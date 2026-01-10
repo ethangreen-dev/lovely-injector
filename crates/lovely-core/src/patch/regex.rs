@@ -10,7 +10,7 @@ use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
-use crate::dump::{PatchDebugEntry, PatchRegion, PatchSource};
+use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource};
 
 use super::{InsertPosition, Target};
 
@@ -49,7 +49,7 @@ pub struct RegexPatch {
 }
 
 impl RegexPatch {
-    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<PatchDebugEntry> {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
         if !self.target.can_apply(target) {
             return None;
         }
@@ -94,11 +94,8 @@ impl RegexPatch {
         // Running byte offset to keep byte references valid after rope mutations.
         let mut delta = 0_isize;
 
-        // Track +/- line offset caused by previous patch applications.
-        let mut line_delta = 0_isize;
-
-        // Collect debug regions
-        let mut regions = Vec::new();
+        // Collect byte regions during patching.
+        let mut byte_regions: Vec<ByteRegion> = Vec::new();
 
         for groups in captures {
             // Get the entire captured span (index 0);
@@ -216,58 +213,36 @@ impl RegexPatch {
                 }
             }
 
-            // Calculate region line numbers (1-based), adjusted for previous modifications.
-            let start_line = 1 + (rope.line_of_byte(target_start) as isize + line_delta) as usize;
-            let payload_lines = payload.lines().count();
-            let payload_newlines = payload.matches('\n').count() as isize;
+            let payload_bytes = payload.len();
 
             match self.position {
                 InsertPosition::Before => {
                     rope.insert(target_start, &payload);
-                    delta += payload.len() as isize;
-                    line_delta += payload_newlines;
-
-                    regions.push(PatchRegion {
-                        start_line,
-                        end_line: start_line + payload_lines.saturating_sub(1),
-                    });
+                    byte_regions.push(ByteRegion { start: target_start, end: target_start + payload_bytes, delta: payload_bytes as isize });
+                    delta += payload_bytes as isize;
                 }
                 InsertPosition::After => {
                     rope.insert(target_end, &payload);
-                    delta += payload.len() as isize;
-
-                    let after_line = (rope.line_of_byte(target_end) as isize + 1 + line_delta) as usize;
-                    line_delta += payload_newlines;
-
-                    regions.push(PatchRegion {
-                        start_line: after_line,
-                        end_line: after_line + payload_lines.saturating_sub(1),
-                    });
+                    byte_regions.push(ByteRegion { start: target_end, end: target_end + payload_bytes, delta: payload_bytes as isize });
+                    delta += payload_bytes as isize;
                 }
                 InsertPosition::At => {
-                    let removed_newlines = rope.byte_slice(target_start..target_end).to_string().matches('\n').count() as isize;
-
+                    let old_len = target_group.end - target_group.start;
                     rope.delete(target_start..target_end);
                     rope.insert(target_start, &payload);
-                    let old_len = target_group.end - target_group.start;
+                    byte_regions.push(ByteRegion { start: target_start, end: target_start + payload_bytes, delta: payload_bytes as isize - old_len as isize });
                     delta -= old_len as isize;
-                    delta += payload.len() as isize;
-                    line_delta += payload_newlines - removed_newlines;
-
-                    regions.push(PatchRegion {
-                        start_line,
-                        end_line: start_line + payload_lines.saturating_sub(1),
-                    });
+                    delta += payload_bytes as isize;
                 }
             }
         }
 
-        Some(PatchDebugEntry {
+        Some(ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
                 pattern: self.pattern.clone(),
             },
-            regions,
+            regions: byte_regions,
         })
     }
 }
