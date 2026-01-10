@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::dump::{PatchDebugEntry, PatchRegion, PatchSource};
+use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource};
 
 use super::{InsertPosition, Target};
 
@@ -36,8 +36,8 @@ pub struct PatternPatch {
 
 impl PatternPatch {
     /// Apply the pattern patch onto the rope.
-    /// Returns `Some(PatchDebugEntry)` if the rope was modified, `None` otherwise.
-    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<PatchDebugEntry> {
+    /// Returns `Some(ByteDebugEntry)` if the rope was modified, `None` otherwise.
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
         if !self.target.can_apply(target) {
             return None;
         }
@@ -123,8 +123,8 @@ impl PatternPatch {
         // Track the +/- index offset caused by previous line injections.
         let mut line_delta: isize = 0;
 
-        // Collect debug regions
-        let mut regions = Vec::new();
+        // Collect byte regions during patching.
+        let mut byte_regions: Vec<ByteRegion> = Vec::new();
 
         for (line_idx, indent) in matches {
             let adjusted_line_idx = line_idx.saturating_add_signed(line_delta);
@@ -140,48 +140,35 @@ impl PatternPatch {
                 payload.push('\n');
             }
             let payload_lines = payload.lines().count() as isize;
-
-            // Calculate the region that will be affected
-            let region_start = adjusted_line_idx + 1;
-            let region_end;
+            let payload_bytes = payload.len();
 
             match self.position {
                 InsertPosition::Before => {
-                    region_end = region_start + payload_lines as usize - 1;
-                    line_delta += payload_lines;
                     rope.insert(start, &payload);
+                    byte_regions.push(ByteRegion { start, end: start + payload_bytes, delta: payload_bytes as isize });
+                    line_delta += payload_lines;
                 }
                 InsertPosition::After => {
-                    let after_start = adjusted_line_idx + wm_lines_len + 1;
-                    regions.push(PatchRegion {
-                        start_line: after_start,
-                        end_line: after_start + payload_lines as usize - 1,
-                    });
-                    line_delta += payload_lines;
                     rope.insert(end, &payload);
-                    continue;
+                    byte_regions.push(ByteRegion { start: end, end: end + payload_bytes, delta: payload_bytes as isize });
+                    line_delta += payload_lines;
                 }
                 InsertPosition::At => {
-                    region_end = region_start + payload_lines as usize - 1;
-                    line_delta += payload_lines;
-                    line_delta -= wm_lines_len as isize;
+                    let removed_bytes = end - start;
                     rope.delete(start..end);
                     rope.insert(start, &payload);
+                    byte_regions.push(ByteRegion { start, end: start + payload_bytes, delta: payload_bytes as isize - removed_bytes as isize });
+                    line_delta += payload_lines - wm_lines_len as isize;
                 }
             };
-
-            regions.push(PatchRegion {
-                start_line: region_start,
-                end_line: region_end,
-            });
         }
 
-        Some(PatchDebugEntry {
+        Some(ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
                 pattern: self.pattern.clone(),
             },
-            regions,
+            regions: byte_regions,
         })
     }
 }
