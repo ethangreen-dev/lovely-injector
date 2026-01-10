@@ -10,6 +10,7 @@ use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
+use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource};
 
 use super::{InsertPosition, Target};
 
@@ -48,9 +49,9 @@ pub struct RegexPatch {
 }
 
 impl RegexPatch {
-    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> bool {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
         if !self.target.can_apply(target) {
-            return false;
+            return None;
         }
 
         let input = Input::new(rope.into_cursor());
@@ -67,7 +68,7 @@ impl RegexPatch {
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
             log::warn!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
-            return false;
+            return None;
         }
         if let Some(times) = self.times {
             fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize, path: &Path) {
@@ -90,9 +91,11 @@ impl RegexPatch {
             }
         }
 
-        // This is our running byte offset. We use this to ensure that byte references
-        // within the capture group remain valid even after the rope has been mutated.
+        // Running byte offset to keep byte references valid after rope mutations.
         let mut delta = 0_isize;
+
+        // Collect byte regions during patching.
+        let mut byte_regions: Vec<ByteRegion> = Vec::new();
 
         for groups in captures {
             // Get the entire captured span (index 0);
@@ -210,27 +213,36 @@ impl RegexPatch {
                 }
             }
 
+            let payload_bytes = payload.len();
+
             match self.position {
                 InsertPosition::Before => {
                     rope.insert(target_start, &payload);
-                    let new_len = payload.len();
-                    delta += new_len as isize;
+                    byte_regions.push(ByteRegion { start: target_start, end: target_start + payload_bytes, delta: payload_bytes as isize });
+                    delta += payload_bytes as isize;
                 }
                 InsertPosition::After => {
                     rope.insert(target_end, &payload);
-                    let new_len = payload.len();
-                    delta += new_len as isize;
+                    byte_regions.push(ByteRegion { start: target_end, end: target_end + payload_bytes, delta: payload_bytes as isize });
+                    delta += payload_bytes as isize;
                 }
                 InsertPosition::At => {
+                    let old_len = target_group.end - target_group.start;
                     rope.delete(target_start..target_end);
                     rope.insert(target_start, &payload);
-                    let old_len = target_group.end - target_group.start;
-                    let new_len = payload.len();
+                    byte_regions.push(ByteRegion { start: target_start, end: target_start + payload_bytes, delta: payload_bytes as isize - old_len as isize });
                     delta -= old_len as isize;
-                    delta += new_len as isize;
+                    delta += payload_bytes as isize;
                 }
             }
         }
-        true
+
+        Some(ByteDebugEntry {
+            patch_source: PatchSource {
+                file: path.display().to_string(),
+                pattern: self.pattern.clone(),
+            },
+            regions: byte_regions,
+        })
     }
 }
