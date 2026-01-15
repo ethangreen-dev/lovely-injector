@@ -563,6 +563,7 @@ dependencies = [
  "regex-lite",
  "serde",
  "serde_ignored",
+ "serde_json",
  "sha2",
  "toml",
  "walkdir",
