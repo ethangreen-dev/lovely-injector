@@ -1,10 +1,10 @@
+use super::Target;
 use crop::Rope;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use super::Target;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -22,7 +22,11 @@ pub struct CopyPatch {
     pub payload: Option<String>,
 
     // Currently unused.
-    pub name: Option<String>
+    pub name: Option<String>,
+
+    // Buffer contents read at load time. We do this to support zip-based mods that we can't arbitrarily read from.
+    #[serde(skip)]
+    pub contents: Vec<String>,
 }
 impl CopyPatch {
     /// Apply a copy patch onto the provided buffer and name.
@@ -35,42 +39,22 @@ impl CopyPatch {
             return false;
         }
 
-        
+        // Combine contents and payload into a single iterator. Contents, then payload (if defined).
+        let payloads = self
+            .contents
+            .iter()
+            .map(|s| s.as_str())
+            .chain(self.payload.as_deref().into_iter());
 
-        // Merge the provided payloads into a single buffer. Each source path should
-        // be made absolute by the patch loader.
-        if let Some(ref sources) = self.sources {
-            for source in sources.iter() {
-                let contents = fs::read_to_string(source).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to read source file at {source:?} for copy patch from {}: {e:?}",
-                        path.display()
-                    )
-                });
-
-                // Append or prepend the patch's lines onto the provided buffer.
-                match self.position {
-                    CopyPosition::Prepend => {
-                        rope.insert(0, "\n");
-                        rope.insert(0, &contents);
-                    }
-                    CopyPosition::Append => {
-                        rope.insert(rope.byte_len(), "\n");
-                        rope.insert(rope.byte_len(), &contents);
-                    }
-                }
-            }
-        }
-
-        if let Some(ref payload) = self.payload {
+        for content in payloads {
             match self.position {
                 CopyPosition::Prepend => {
                     rope.insert(0, "\n");
-                    rope.insert(0, payload);
+                    rope.insert(0, content);
                 }
                 CopyPosition::Append => {
                     rope.insert(rope.byte_len(), "\n");
-                    rope.insert(rope.byte_len(), payload);
+                    rope.insert(rope.byte_len(), content);
                 }
             }
         }
