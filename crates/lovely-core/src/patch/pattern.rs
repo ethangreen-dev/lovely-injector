@@ -35,6 +35,18 @@ pub struct PatternPatch {
 }
 
 impl PatternPatch {
+    pub fn debug_from_warning_string(&self, path: &Path, warning: String) -> ByteDebugEntry {
+        log::warn!("{}", warning);
+        ByteDebugEntry {
+            patch_source: PatchSource {
+                file: path.display().to_string(),
+                pattern: self.pattern.clone(),
+            },
+            regions: Vec::new(),
+            warnings: Some(vec![warning.to_string()]),
+        }
+    }
+
     /// Apply the pattern patch onto the rope.
     /// Returns `Some(ByteDebugEntry)` if the rope was modified, `None` otherwise.
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
@@ -49,11 +61,10 @@ impl PatternPatch {
             .map(WildMatch::new)
             .collect_vec();
         if wm_lines.is_empty() {
-            log::warn!(
+            return Some(self.debug_from_warning_string(path, format!(
                 "Pattern on target '{target}' for pattern patch from {} has no lines",
                 path.display()
-            );
-            return None;
+            )));
         }
         let wm_lines_len = wm_lines.len();
 
@@ -86,13 +97,13 @@ impl PatternPatch {
         }
 
         if matches.is_empty() {
-            log::warn!(
+            return Some(self.debug_from_warning_string(path, format!(
                 "Pattern '{}' on target '{target}' for pattern patch from {} resulted in no matches",
                 self.pattern.escape_debug(),
                 path.display(),
-            );
-            return None;
+            )));
         }
+        let mut warnings = Vec::new();
         if let Some(times) = self.times {
             fn warn_pattern_mismatch(
                 pattern: &str,
@@ -100,7 +111,7 @@ impl PatternPatch {
                 found_matches: usize,
                 wanted_matches: usize,
                 path: &Path,
-            ) {
+            ) -> String{
                 let warn_msg: String = if pattern.lines().count() > 1 {
                     format!("Pattern '''\n{pattern}''' on target '{target}' for pattern patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
@@ -109,13 +120,15 @@ impl PatternPatch {
                 for line in warn_msg.lines() {
                     log::warn!("{}", line)
                 }
+                warn_msg
             }
             if matches.len() < times {
-                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
+                warnings.push(warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path));
             }
             if matches.len() > times {
-                warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path);
+                warnings.push(warn_pattern_mismatch(&self.pattern, target, matches.len(), times, path));
                 log::warn!("Ignoring excess matches");
+                warnings.push("Ignoring excess matches".to_string());
                 matches.truncate(times);
             }
         }
@@ -169,6 +182,7 @@ impl PatternPatch {
                 pattern: self.pattern.clone(),
             },
             regions: byte_regions,
+            warnings: if warnings.is_empty() {None} else {Some(warnings)},
         })
     }
 }

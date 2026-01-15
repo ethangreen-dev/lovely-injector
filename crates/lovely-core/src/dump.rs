@@ -8,6 +8,7 @@ use serde::Serialize;
 pub struct PatchDebugEntry {
     pub patch_source: PatchSource,
     pub regions: Vec<PatchRegion>,
+    pub warnings: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -44,6 +45,7 @@ impl ByteRegion {
 pub struct ByteDebugEntry {
     pub patch_source: PatchSource,
     pub regions: Vec<ByteRegion>,
+    pub warnings: Option<Vec<String>>,
 }
 
 impl ByteDebugEntry {
@@ -83,6 +85,7 @@ impl PatchDebug {
                         end_line: rope.line_of_byte(r.end.saturating_sub(1)) + 1,
                     })
                     .collect(),
+                warnings: entry.warnings,
             })
             .collect();
 

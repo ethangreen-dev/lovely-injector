@@ -49,6 +49,18 @@ pub struct RegexPatch {
 }
 
 impl RegexPatch {
+    pub fn debug_from_warning_string(&self, path: &Path, warning: String) -> ByteDebugEntry {
+        log::warn!("{}", warning);
+        ByteDebugEntry {
+            patch_source: PatchSource {
+                file: path.display().to_string(),
+                pattern: self.pattern.clone(),
+            },
+            regions: Vec::new(),
+            warnings: Some(vec![warning.to_string()]),
+        }
+    }
+
     pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
         if !self.target.can_apply(target) {
             return None;
@@ -67,11 +79,12 @@ impl RegexPatch {
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
-            log::warn!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
-            return None;
+            let warning = format!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
+            return Some(self.debug_from_warning_string(path, warning));
         }
+        let mut warnings = Vec::new();
         if let Some(times) = self.times {
-            fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize, path: &Path) {
+            fn warn_regex_mismatch(pattern: &str, target: &str, found_matches: usize, wanted_matches: usize, path: &Path) -> String {
                 let warn_msg: String = if pattern.lines().count() > 1 {
                     format!("Regex '''\n{pattern}''' on target '{target}' for regex patch from {} resulted in {found_matches} matches, wanted {wanted_matches}", path.display())
                 } else {
@@ -80,13 +93,15 @@ impl RegexPatch {
                 for line in warn_msg.lines() {
                     log::warn!("{}", line)
                 }
+                warn_msg
             }
             if captures.len() < times {
-                warn_regex_mismatch(&self.pattern, target, captures.len(), times, path);
+                warnings.push(warn_regex_mismatch(&self.pattern, target, captures.len(), times, path));
             }
             if captures.len() > times {
-                warn_regex_mismatch(&self.pattern, target, captures.len(), times, path);
+                warnings.push(warn_regex_mismatch(&self.pattern, target, captures.len(), times, path));
                 log::warn!("Ignoring excess matches");
+                warnings.push("Ignoring excess matches".to_string());
                 captures.truncate(times);
             }
         }
@@ -243,6 +258,6 @@ impl RegexPatch {
                 pattern: self.pattern.clone(),
             },
             regions: byte_regions,
-        })
+            warnings: if warnings.is_empty() {None} else {Some(warnings)}, })
     }
 }
