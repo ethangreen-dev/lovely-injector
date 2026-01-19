@@ -8,13 +8,26 @@ use serde::Serialize;
 pub struct PatchDebugEntry {
     pub patch_source: PatchSource,
     pub regions: Vec<PatchRegion>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum DebugPatchType {
+    #[serde(rename = "pattern")]
+    Pattern,
+    #[serde(rename = "regex")]
+    Regex,
+    #[serde(rename = "copy")]
+    Copy,
 }
 
 #[derive(Serialize, Debug, Clone)]
 pub struct PatchSource {
     pub file: String,
-    pub pattern: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    pub patch_type: DebugPatchType,
 }
 
 #[derive(Serialize, Debug)]
@@ -31,11 +44,13 @@ pub struct ByteRegion {
 }
 
 impl ByteRegion {
-    /// Adjust this region if an edit occurred at or before it.
+    /// Adjust this region based on an edit that occurred elsewhere.
     pub fn adjust(&mut self, edit_pos: usize, delta: isize) {
-        if self.start >= edit_pos {
-            self.start = (self.start as isize + delta) as usize;
-            self.end = (self.end as isize + delta) as usize;
+        if edit_pos <= self.start {
+            self.start = self.start.saturating_add_signed(delta);
+            self.end = self.end.saturating_add_signed(delta);
+        } else if edit_pos < self.end {
+            self.end = self.end.saturating_add_signed(delta);
         }
     }
 }
