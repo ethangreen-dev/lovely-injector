@@ -5,7 +5,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use wildmatch::WildMatch;
 
-use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource};
+use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource, DebugPatchType};
 
 use super::{InsertPosition, Target};
 
@@ -40,7 +40,8 @@ impl PatternPatch {
         ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
-                pattern: self.pattern.clone(),
+                pattern: Some(self.pattern.clone()),
+                patch_type: DebugPatchType::Pattern,
             },
             regions: Vec::new(),
             warnings: Some(vec![warning.to_string()]),
@@ -179,7 +180,8 @@ impl PatternPatch {
         Some(ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
-                pattern: self.pattern.clone(),
+                pattern: Some(self.pattern.clone()),
+                patch_type: DebugPatchType::Pattern,
             },
             regions: byte_regions,
             warnings: if warnings.is_empty() {None} else {Some(warnings)},

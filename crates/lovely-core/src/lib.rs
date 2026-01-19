@@ -601,8 +601,17 @@ impl PatchTable {
 
         // Apply copy patches.
         for (patch, path) in copy_patches {
-            if patch.apply(target, &mut rope, path) {
+            let result = patch.apply(target, &mut rope, path);
+            if let Some(entry) = result {
+                // Adjust all previous entries based on this patch's edits.
+                for region in &entry.regions {
+                    for prev_entry in &mut byte_entries {
+                        prev_entry.adjust(region.start, region.delta);
+                    }
+                }
+
                 patch_count += 1;
+                byte_entries.push(entry);
             }
         }
 

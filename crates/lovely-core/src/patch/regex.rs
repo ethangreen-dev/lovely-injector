@@ -10,7 +10,7 @@ use crop::Rope;
 use serde::{Serialize, Deserialize};
 
 use crate::chunk_vec_cursor::IntoCursor;
-use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource};
+use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource, DebugPatchType};
 
 use super::{InsertPosition, Target};
 
@@ -54,7 +54,8 @@ impl RegexPatch {
         ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
-                pattern: self.pattern.clone(),
+                pattern: Some(self.pattern.clone()),
+                patch_type: DebugPatchType::Regex,
             },
             regions: Vec::new(),
             warnings: Some(vec![warning.to_string()]),
@@ -255,7 +256,8 @@ impl RegexPatch {
         Some(ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
-                pattern: self.pattern.clone(),
+                pattern: Some(self.pattern.clone()),
+                patch_type: DebugPatchType::Regex,
             },
             regions: byte_regions,
             warnings: if warnings.is_empty() {None} else {Some(warnings)}, })
