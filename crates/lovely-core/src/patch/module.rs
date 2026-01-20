@@ -89,7 +89,11 @@ impl ModulePatch {
             let module_cstr = CString::new(self.name.clone()).unwrap();
             sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
             sys::lua_settop(state, stack_top);
-            return Ok(false);
+            if self.load_now {
+                return Err("An error occured loading a load_now module:\n\nError: ".to_owned() + &err);
+            } else {
+                return Ok(false);
+            }
         }
 
         if self.load_now {
@@ -103,6 +107,10 @@ impl ModulePatch {
                 );
                 let err = state.to_string(-1);
                 log::error!("Error: {err}");
+                state.push_closure(lua_err_identity_closure, 1);
+                let module_cstr = CString::new(self.name.clone()).unwrap();
+                sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
+                sys::lua_settop(state, stack_top);
                 sys::lua_settop(state, stack_top);
                 return Err("An error occured evaluating a load_now module:\n\nError: ".to_owned() + &err);
             }
