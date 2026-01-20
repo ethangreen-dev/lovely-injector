@@ -14,12 +14,13 @@ typedef void (*lua_pushvalue_ptr)(lua_State *state, int index);
 typedef void (*lua_pushcclosure_ptr)(lua_State *state, lua_CFunction f, int n);
 typedef const char* (*lua_tolstring_ptr)(lua_State *state, int index, size_t *len);
 typedef int (*lua_type_ptr)(lua_State *state, int index);
-typedef void (*luaL_register_ptr)(lua_State *state, const char *libname, const luaL_Reg *l);
 typedef void (*lua_pushstring_ptr)(lua_State *state, const char *string);
 typedef void (*lua_pushnumber_ptr)(lua_State *state, double number);
 typedef void (*lua_pushboolean_ptr)(lua_State *state, int b);
 typedef void (*lua_settable_ptr)(lua_State *state, int index);
 typedef void (*lua_createtable_ptr)(lua_State *state, int narr, int nrec);
+typedef int (*lua_error_ptr)(lua_State *state);
+typedef void (*luaL_register_ptr)(lua_State *state, const char *libname, const luaL_Reg *l);
 typedef const char* (*luaL_checklstring_ptr)(lua_State *state, int index, size_t *len);
 
 struct LuaLib {
@@ -33,12 +34,13 @@ struct LuaLib {
     lua_pushcclosure_ptr lua_pushcclosure;
     lua_tolstring_ptr lua_tolstring;
     lua_type_ptr lua_type;
-    luaL_register_ptr luaL_register;
     lua_pushstring_ptr lua_pushstring;
     lua_pushnumber_ptr lua_pushnumber;
     lua_pushboolean_ptr lua_pushboolean;
     lua_settable_ptr lua_settable;
     lua_createtable_ptr lua_createtable;
+    lua_error_ptr lua_error;
+    luaL_register_ptr luaL_register;
     luaL_checklstring_ptr luaL_checklstring;
 };
 

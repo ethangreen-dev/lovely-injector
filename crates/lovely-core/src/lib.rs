@@ -271,7 +271,7 @@ impl Lovely {
                     .map(|(x, _, path)| (x, path));
 
                 for (patch, path) in module_patches {
-                    unsafe { patch.apply("", state, path) };
+                    unsafe { patch.apply("", state, path).expect("Non load_now patch failed! This shouldn't happen.") };
                 }
             }
         }
@@ -309,7 +309,13 @@ impl Lovely {
         };
 
         // Apply patches onto this buffer.
-        let (patched, debug) = patch_table.apply_patches(name, buf_str, state);
+        let res = patch_table.apply_patches(name, buf_str, state);
+        if res.is_err() {
+            state.push(res.unwrap_err());
+            // NOTE: Not really a great error but it doesn't handle the correcter errors right.
+            return 3; // LUA_ERRSYNTAX
+        }
+        let (patched, debug) = res.unwrap();
 
         write_dump(&self.mod_dir, "game-dump", &pretty_name, &patched, &PatchDebug::new(name));
         write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
@@ -546,7 +552,7 @@ impl PatchTable {
         target: &str,
         buffer: &str,
         lua_state: *mut LuaState,
-    ) -> (String, PatchDebug) {
+    ) -> Result<(String, PatchDebug), String> { // Buffer Content, Debug info, Error message
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
@@ -594,7 +600,7 @@ impl PatchTable {
         for (patch, path) in module_patches {
             let result = unsafe { patch.apply(target, lua_state, path) };
 
-            if result {
+            if result? {
                 patch_count += 1;
             }
         }
@@ -658,24 +664,32 @@ impl PatchTable {
             info!("Applied {patch_count} patches to '{target}'");
         }
 
-        (patched, debug)
+        Ok((patched, debug))
     }
 }
 
 unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf_name = check_lua_string(lua_state, 1);
     let buf = check_lua_string(lua_state, 2);
-    let result = panic::catch_unwind(|| {
+    let mut num = 1;
+    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
         let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
         if binding.needs_patching(&buf_name) {
-            let (patched, _debug) = binding.apply_patches(&buf_name, &buf, lua_state);
+            let res = binding.apply_patches(&buf_name, &buf, lua_state);
+            if res.is_err() {
+                lua_state.push(false);
+                lua_state.push(res.unwrap_err());
+                num = 2;
+                return;
+            }
+            let (patched, _debug) = res.unwrap();
             lua_state.push(patched);
         } else {
             lua_state.push(buf)
         }
-    });
+    }));
     if result.is_ok() {
-        1
+        num
     } else {
         lua_state.push(false);
         lua_state.push("Internal lovely error: Failed to acquire the lovely runtime");

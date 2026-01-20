@@ -72,12 +72,13 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lua_pushcclosure(state: *mut LuaState, f: LuaFunc, n: c_int);
     pub unsafe extern "C" fn lua_tolstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const c_char;
     pub unsafe extern "C" fn lua_type(state: *mut LuaState, index: c_int) -> c_int;
-    pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
     pub unsafe extern "C" fn lua_pushstring(state: *mut LuaState, string: *const char);
     pub unsafe extern "C" fn lua_pushnumber(state: *mut LuaState, number: f64);
     pub unsafe extern "C" fn lua_pushboolean(state: *mut LuaState, b: c_int);
     pub unsafe extern "C" fn lua_settable(state: *mut LuaState, index: c_int);
     pub unsafe extern "C" fn lua_createtable(state: *mut LuaState, narr: c_int, nrec: c_int);
+    pub unsafe extern "C" fn lua_error(state: *mut LuaState) -> c_int;
+    pub unsafe extern "C" fn lual_register(state: *mut LuaState, libname: *const char, l: *const c_void);
     pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
 });
 
@@ -103,6 +104,7 @@ impl LuaLib {
             lua_pushboolean: *library.get(b"lua_pushboolean").unwrap(),
             lua_settable: *library.get(b"lua_settable").unwrap(),
             lua_createtable: *library.get(b"lua_createtable").unwrap(),
+            lua_error: *library.get(b"lua_error").unwrap(),
             lual_checklstring: *library.get(b"luaL_checklstring").unwrap(),
         }
     }
@@ -112,6 +114,7 @@ impl LuaLib {
 pub(crate) trait LuaStateTrait {
     unsafe fn push<P: Pushable>(self, obj: P);
     unsafe fn push_closure(self, func: LuaFunc, vals: c_int);
+    unsafe fn to_string(self, index: c_int) -> String;
 }
 
 impl LuaStateTrait for *mut LuaState {
@@ -121,6 +124,14 @@ impl LuaStateTrait for *mut LuaState {
 
     unsafe fn push_closure(self, func: LuaFunc, vals: c_int) {
         lua_pushcclosure(self, func, vals);
+    }
+
+    unsafe fn to_string(self, index: c_int) -> String {
+        let mut str_len = 0usize;
+        let arg_str = lua_tolstring(self, index, &mut str_len);
+
+        let str_buf = slice::from_raw_parts(arg_str as *const u8, str_len);
+        String::from_utf8_lossy(str_buf).to_string()
     }
 }
 /// A trait which allows the implementing value to generically push its value onto the Lua stack.
@@ -208,7 +219,7 @@ impl LuaTable {
 }
 
 impl Pushable for LuaTable {
-        unsafe fn push(&self, state: *mut LuaState) {
+    unsafe fn push(&self, state: *mut LuaState) {
         // Create a table at the top of the stack.
         lua_createtable(state, 0, self.var.len().try_into().unwrap());
 
@@ -347,4 +358,14 @@ pub unsafe extern "C" fn lua_identity_closure(state: *mut LuaState) -> c_int {
     lua_pushvalue(state, LUA_GLOBALSINDEX - 1);
     // We just return that value
     1
+}
+
+/// A function, which as a Lua closure, throws the first upvalue. This lets it
+/// be used to wrap lua values into a closure which throws that value.
+/// # Safety
+/// Makes some FFI calls, mutates internal C lua state.
+pub unsafe extern "C" fn lua_err_identity_closure(state: *mut LuaState) -> c_int {
+    // LUA_GLOBALSINDEX - 1 is where the first upvalue is located
+    lua_pushvalue(state, LUA_GLOBALSINDEX - 1);
+    lua_error(state)
 }

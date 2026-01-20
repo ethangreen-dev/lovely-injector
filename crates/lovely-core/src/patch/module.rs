@@ -5,7 +5,7 @@ use std::{
     ptr,
 };
 
-use crate::sys::{self, lua_identity_closure, LuaState};
+use crate::sys::{self, lua_identity_closure, lua_err_identity_closure, LuaState, LuaStateTrait};
 use serde::{Deserialize, Serialize};
 use crate::RUNTIME;
 
@@ -38,10 +38,10 @@ impl ModulePatch {
         file_name: &str,
         state: *mut LuaState,
         path: &Path,
-    ) -> bool {
+    ) -> Result<bool, String> {
         // Stop if we're not at the correct insertion point.
         if self.load_now && self.before.as_ref().unwrap() != file_name {
-            return false;
+            return Ok(false);
         }
 
         // Read the source file in as [u8]
@@ -79,12 +79,17 @@ impl ModulePatch {
 
         if return_code != 0 {
             log::error!(
-                "Failed to load module {} for module patch from {}",
+                "Failed to load module {} for module patch from {}:",
                 self.name,
                 path.display()
             );
+            let err = state.to_string(-1);
+            log::error!("Error: {err}");
+            state.push_closure(lua_err_identity_closure, 1);
+            let module_cstr = CString::new(self.name.clone()).unwrap();
+            sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
             sys::lua_settop(state, stack_top);
-            return false;
+            return Ok(false);
         }
 
         if self.load_now {
@@ -92,15 +97,17 @@ impl ModulePatch {
             let return_code = sys::lua_pcall(state, 0, 1, 0);
             if return_code != 0 {
                 log::error!(
-                    "Evaluation of module {} failed for module patch from {}",
+                    "Evaluation of module {} failed for module patch from {}:",
                     self.name,
                     path.display()
                 );
+                let err = state.to_string(-1);
+                log::error!("Error: {err}");
                 sys::lua_settop(state, stack_top);
-                return false;
+                return Err("An error occured evaluating a load_now module:\n\nError: ".to_owned() + &err);
             }
             // Wrap this in the identity closure function
-            sys::lua_pushcclosure(state, lua_identity_closure, 1);
+            state.push_closure(lua_identity_closure, 1);
         }
 
         // Insert results onto the package.preload global table.
@@ -108,6 +115,6 @@ impl ModulePatch {
         sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
         // Always ensure that the lua stack is in good order
         sys::lua_settop(state, stack_top);
-        true
+        Ok(true)
     }
 }
