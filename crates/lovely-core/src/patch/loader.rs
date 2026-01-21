@@ -58,7 +58,7 @@ fn get_dir_patches(mod_dir: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)> 
             // Parse TOML to find referenced sources and preload them
             let mut sources: HashMap<PathBuf, String> = HashMap::new();
             let file_identifier = format!("{:?}", toml_path);
-            if let Ok(patch_file) = parse_patch_file(&content, &file_identifier) {
+            if let Ok(patch_file) = parse_patch_file(&content, &file_identifier, mod_dir) {
                 for patch in &patch_file.patches {
                     match patch {
                         Patch::Module(x) => {
@@ -166,7 +166,7 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
 
         // Parse TOML to find referenced module/copy sources
         let file_identifier = format!("{} from zip {:?}", toml_path, zip_file);
-        if let Ok(patch_file) = parse_patch_file(&content, &file_identifier) {
+        if let Ok(patch_file) = parse_patch_file(&content, &file_identifier, zip_file) {
             for patch in &patch_file.patches {
                 match patch {
                     Patch::Module(x) => {
@@ -299,10 +299,10 @@ pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf,
     // Handle all patch files using preloaded sources
     let all_results = dir_results.into_iter().chain(zip_results.into_iter());
 
-    for (_base_path, ips) in all_results {
+    for (base_path, ips) in all_results {
         for ip in ips {
             let file_identifier = format!("{:?}", ip.path);
-            let mut patch_file: PatchFile = parse_patch_file(&ip.content, &file_identifier)?;
+            let mut patch_file: PatchFile = parse_patch_file(&ip.content, &file_identifier, &base_path)?;
 
             // For module and copy patches, use preloaded sources
             for patch in &mut patch_file.patches {
@@ -403,12 +403,16 @@ pub fn process_patches(
 }
 
 /// Parse TOML content into a PatchFile
-fn parse_patch_file(content: &str, file_identifier: &str) -> Result<PatchFile> {
+fn parse_patch_file(content: &str, file_identifier: &str, mod_dir: &Path) -> Result<PatchFile> {
+    // HACK: Replace instances of {{lovely_hack:patch_dir}} with mod directory.
+    let clean_mod_dir = &mod_dir.to_string_lossy().replace("\\", "\\\\");
+    let content = content.replace("{{lovely_hack:patch_dir}}", clean_mod_dir);
+
     let ignored_key_callback = |key: serde_ignored::Path| {
         warn!("Unknown key `{key}` found in patch file {file_identifier}, ignoring it");
     };
 
-    serde_ignored::deserialize(toml::Deserializer::new(content), ignored_key_callback)
+    serde_ignored::deserialize(toml::Deserializer::new(&content), ignored_key_callback)
         .with_context(|| format!("Failed to parse patch file {file_identifier}"))
 }
 
