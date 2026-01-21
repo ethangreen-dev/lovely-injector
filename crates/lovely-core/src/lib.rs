@@ -19,7 +19,7 @@ use regex_lite::Regex;
 use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
 
 use crate::patch::Target;
-use crate::dump::{ByteDebugEntry, PatchDebug, write_dump};
+use crate::dump::{PatchDebug, write_dump};
 
 pub mod chunk_vec_cursor;
 pub mod dump;
@@ -272,7 +272,7 @@ impl Lovely {
 
                 for (patch, path) in module_patches {
                     let patch: &ModulePatch = patch;
-                    unsafe { patch.apply("", state, path) };
+                    let _ = unsafe { patch.apply("", state, path) };
                 }
             }
         }

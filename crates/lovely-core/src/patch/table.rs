@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::dump::{ByteDebugEntry, PatchDebug};
 use crate::patch::{loader, vars};
 use crate::patch::{Patch, Priority};
 use crate::sys::{preload_module, LuaFunc, LuaState, LuaTable};
@@ -77,6 +78,7 @@ impl PatchTable {
     }
 
     /// Apply one or more patches onto the target's buffer.
+    /// Returns the patched content and debug info.
     /// # Safety
     /// Unsafe due to internal unchecked usages of raw lua state.
     pub unsafe fn apply_patches(
@@ -84,7 +86,7 @@ impl PatchTable {
         target: &str,
         buffer: &str,
         lua_state: *mut LuaState,
-    ) -> String {
+    ) -> Result<(String, PatchDebug), String> { // Buffer Content, Debug info, Error message
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
@@ -125,11 +127,14 @@ impl PatchTable {
         let mut patch_count = 0;
         let mut rope = Rope::from(buffer);
 
+        // Collect byte-based debug entries, adjust after each patch.
+        let mut byte_entries: Vec<ByteDebugEntry> = Vec::new();
+
         // Apply module injection patches.
         for (patch, path) in module_patches {
             let result = unsafe { patch.apply(target, lua_state, path) };
 
-            if result {
+            if result? {
                 patch_count += 1;
             }
         }
@@ -137,8 +142,16 @@ impl PatchTable {
         // Apply copy patches.
         for (patch, path) in copy_patches {
             let result = patch.apply(target, &mut rope, path);
-            if result {
+            if let Some(entry) = result {
+                // Adjust all previous entries based on this patch's edits.
+                for region in &entry.regions {
+                    for prev_entry in &mut byte_entries {
+                        prev_entry.adjust(region.start, region.delta);
+                    }
+                }
+
                 patch_count += 1;
+                byte_entries.push(entry);
             }
         }
 
@@ -149,10 +162,21 @@ impl PatchTable {
                 _ => unreachable!(),
             };
 
-            if result {
+            if let Some(entry) = result {
+                // Adjust all previous entries based on this patch's edits.
+                for region in &entry.regions {
+                    for prev_entry in &mut byte_entries {
+                        prev_entry.adjust(region.start, region.delta);
+                    }
+                }
+
                 patch_count += 1;
+                byte_entries.push(entry);
             }
         }
+
+        // Convert byte entries to line-based debug info using final rope state.
+        let debug = PatchDebug::from_byte_entries(target, byte_entries, &rope);
 
         let mut patched_lines = {
             let inner = rope.to_string();
@@ -174,6 +198,6 @@ impl PatchTable {
             info!("Applied {patch_count} patches to '{target}'");
         }
 
-        patched
+        Ok((patched, debug))
     }
 }
