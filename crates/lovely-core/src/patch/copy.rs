@@ -1,10 +1,7 @@
 use super::Target;
 use crop::Rope;
 use serde::{Deserialize, Serialize};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource, DebugPatchType};
 
 #[derive(Serialize, Deserialize, Debug)]
