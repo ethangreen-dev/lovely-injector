@@ -319,7 +319,7 @@ impl Lovely {
         }
         let (patched, debug) = res.unwrap();
 
-        if !debug.entries.iter().all(|x| x.regions.is_empty()) {
+        if self.dump_all || !debug.entries.iter().all(|x| x.regions.is_empty()) {
             write_dump(
                 &self.mod_dir,
                 "game-dump",
