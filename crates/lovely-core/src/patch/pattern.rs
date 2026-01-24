@@ -30,6 +30,11 @@ pub struct PatternPatch {
     #[serde(default)]
     pub overwrite: bool,
 
+    // Whether a warning will appear if the patch does not match anything.
+    // Overridden to true for targets that are simply "*"
+    #[serde(default)]
+    pub silent: bool,
+
     // Currently unused.
     pub name: Option<String>,
 }
@@ -97,7 +102,7 @@ impl PatternPatch {
             }
         }
 
-        if matches.is_empty() {
+        if matches.is_empty() && !self.silent {
             return Some(self.debug_from_warning_string(path, format!(
                 "Pattern '{}' on target '{target}' for pattern patch from {} resulted in no matches",
                 self.pattern.escape_debug(),

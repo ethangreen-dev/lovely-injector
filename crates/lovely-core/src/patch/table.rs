@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use wildmatch::WildMatch;
 
 use crate::dump::{ByteDebugEntry, PatchDebug};
 use crate::patch::{loader, vars};
@@ -14,6 +15,7 @@ use log::*;
 pub struct PatchTable {
     pub mod_dir: PathBuf,
     pub targets: HashSet<String>,
+    pub glob_targets: Vec<WildMatch>,
     // Unsorted
     pub patches: Vec<(Patch, Priority, PathBuf)>,
     pub vars: HashMap<String, String>,
@@ -25,6 +27,7 @@ impl Default for PatchTable {
         Self {
             mod_dir: PathBuf::new(),
             targets: HashSet::new(),
+            glob_targets: Vec::new(),
             patches: Vec::new(),
             vars: HashMap::new(),
         }
@@ -35,11 +38,12 @@ impl PatchTable {
     /// Load patches from the provided mod directory.
     pub fn load(mod_dir: &Path) -> Result<PatchTable> {
         let raw_patches = loader::load_patches_new(mod_dir)?;
-        let (patches, targets, vars) = loader::process_patches(raw_patches);
+        let (patches, targets, vars, glob_targets) = loader::process_patches(raw_patches);
 
         Ok(PatchTable {
             mod_dir: mod_dir.to_path_buf(),
             targets,
+            glob_targets,
             patches,
             vars,
         })
@@ -48,7 +52,11 @@ impl PatchTable {
     /// Determine if the provided target file / name requires patching.
     pub fn needs_patching(&self, target: &str) -> bool {
         let target = target.strip_prefix('@').unwrap_or(target);
-        self.targets.contains(target)
+        if self.targets.contains(target) {
+            true
+        } else {
+            self.glob_targets.iter().any(|x| x.matches(target))
+        }
     }
 
     /// Inject lovely metadata into the game.
@@ -86,7 +94,8 @@ impl PatchTable {
         target: &str,
         buffer: &str,
         lua_state: *mut LuaState,
-    ) -> Result<(String, PatchDebug), String> { // Buffer Content, Debug info, Error message
+    ) -> Result<(String, PatchDebug), String> {
+        // Buffer Content, Debug info, Error message
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
@@ -170,7 +179,9 @@ impl PatchTable {
                     }
                 }
 
-                patch_count += 1;
+                if !entry.regions.is_empty() {
+                    patch_count += 1
+                };
                 byte_entries.push(entry);
             }
         }
@@ -194,7 +205,7 @@ impl PatchTable {
 
         if patch_count == 1 {
             info!("Applied 1 patch to '{target}'");
-        } else {
+        } else if patch_count >= 2 {
             info!("Applied {patch_count} patches to '{target}'");
         }
 

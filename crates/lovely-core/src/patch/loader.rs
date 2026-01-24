@@ -4,8 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use wildmatch::WildMatch;
 
-use crate::patch::{Patch, PatchFile, Priority};
+use crate::patch::{Patch, PatchFile, Priority, Target};
 use itertools::Itertools;
 use log::*;
 use walkdir::WalkDir;
@@ -68,7 +69,9 @@ fn get_dir_patches(mod_dir: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)> 
                             }
                         }
                         Patch::Copy(x) => {
-                            let Some(ref copy_sources) = x.sources else { continue };
+                            let Some(ref copy_sources) = x.sources else {
+                                continue;
+                            };
                             for source in copy_sources {
                                 let full_path = mod_dir.join(source);
                                 if let Ok(source_content) = fs::read_to_string(&full_path) {
@@ -105,30 +108,27 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
         .collect();
 
     // Find the mod root. This is the dir that contains lovely.toml or lovely/
-    let mod_root = names
-        .iter()
-        .find_map(|name| {
-            let parent = get_parent(name);
-            let lovely_toml = format!("{}lovely.toml", parent);
-            let lovely_dir = format!("{}lovely/", parent);
+    let mod_root = names.iter().find_map(|name| {
+        let parent = get_parent(name);
+        let lovely_toml = format!("{}lovely.toml", parent);
+        let lovely_dir = format!("{}lovely/", parent);
 
-            if names
-                .iter()
-                .any(|n| n == &lovely_toml || n.starts_with(&lovely_dir))
-            {
-                Some(parent)
-            } else {
-                None
-            }
-        });
+        if names
+            .iter()
+            .any(|n| n == &lovely_toml || n.starts_with(&lovely_dir))
+        {
+            Some(parent)
+        } else {
+            None
+        }
+    });
     let mod_root = match mod_root {
-            Some(v) => v,
-            None => {
-                log::warn!("No mod root found in zip {:?}. This may happen if the mod does not contain any lovely patches (uses another loader)", zip_file);
-                return Ok((zip_file.to_path_buf(), Vec::new()));
-            },
+        Some(v) => v,
+        None => {
+            log::warn!("No mod root found in zip {:?}. This may happen if the mod does not contain any lovely patches (uses another loader)", zip_file);
+            return Ok((zip_file.to_path_buf(), Vec::new()));
+        }
     };
-
 
     let lovely_toml_path = format!("{}lovely.toml", mod_root);
     let lovely_dir_prefix = format!("{}lovely/", mod_root);
@@ -161,7 +161,10 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
 
         let mut content = String::new();
         file.read_to_string(&mut content).with_context(|| {
-            format!("Failed to read contents of {} from zip {:?}", toml_path, zip_file)
+            format!(
+                "Failed to read contents of {} from zip {:?}",
+                toml_path, zip_file
+            )
         })?;
 
         // Parse TOML to find referenced module/copy sources
@@ -176,7 +179,8 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
                     Patch::Copy(x) => {
                         if let Some(ref sources) = x.sources {
                             for source in sources {
-                                let source_path = format!("{}{}", mod_root, source.to_string_lossy());
+                                let source_path =
+                                    format!("{}{}", mod_root, source.to_string_lossy());
                                 source_paths.insert(source_path);
                             }
                         }
@@ -195,7 +199,10 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
         if let Ok(mut file) = zip.by_name(source_path) {
             let mut content = String::new();
             file.read_to_string(&mut content).with_context(|| {
-                format!("Failed to read source {} from zip {:?}", source_path, zip_file)
+                format!(
+                    "Failed to read source {} from zip {:?}",
+                    source_path, zip_file
+                )
             })?;
             file_contents.insert(source_path.clone(), content);
         }
@@ -231,10 +238,12 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
 /// within each subdirectory that matches either:
 /// - MOD_DIR/lovely.toml
 /// - MOD_DIR/lovely/*.toml
-/// 
-/// Zip archives are supported and uniquely support directory nesting 
+///
+/// Zip archives are supported and uniquely support directory nesting
 /// (i.e., mod.zip/dir/lovely.toml), but otherwise are treated the same as dir mods.
-pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf, HashMap<String, String>)>> {
+pub fn load_patches_new(
+    mod_dir: &Path,
+) -> Result<Vec<(Patch, Priority, PathBuf, HashMap<String, String>)>> {
     let blacklist_file = mod_dir.join("lovely").join("blacklist.txt");
 
     let mut blacklist: HashSet<String> = HashSet::new();
@@ -302,7 +311,8 @@ pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf,
     for (base_path, ips) in all_results {
         for ip in ips {
             let file_identifier = format!("{:?}", ip.path);
-            let mut patch_file: PatchFile = parse_patch_file(&ip.content, &file_identifier, &base_path)?;
+            let mut patch_file: PatchFile =
+                parse_patch_file(&ip.content, &file_identifier, &base_path)?;
 
             // For module and copy patches, use preloaded sources
             for patch in &mut patch_file.patches {
@@ -316,25 +326,34 @@ pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf,
                     }
 
                     x.display_source = x.source.to_string_lossy().to_string();
-                    x.content = ip.sources.get(&x.source)
-                        .with_context(|| format!(
+                    x.content = ip
+                        .sources
+                        .get(&x.source)
+                        .with_context(|| {
+                            format!(
                             "Module source {:?} not found in preloaded sources for patch from {}",
                             x.source,
                             ip.path.display()
-                        ))?
+                        )
+                        })?
                         .clone();
                 }
 
-                let Patch::Copy(ref mut x) = patch else { continue };
-                let Some(ref sources) = x.sources else { continue };
+                let Patch::Copy(ref mut x) = patch else {
+                    continue;
+                };
+                let Some(ref sources) = x.sources else {
+                    continue;
+                };
 
                 for source in sources {
-                    let source_content = ip.sources.get(source)
-                        .with_context(|| format!(
+                    let source_content = ip.sources.get(source).with_context(|| {
+                        format!(
                             "Copy source {:?} not found in preloaded sources for patch from {}",
                             source,
                             ip.path.display()
-                        ))?;
+                        )
+                    })?;
                     x.contents.push(source_content.clone());
                 }
             }
@@ -351,10 +370,14 @@ pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf,
                 )
             })?;
 
-            let patches_vec = patch_file
-                .patches
-                .into_iter()
-                .map(|patch| (patch, priority, mod_relative_path.to_path_buf(), vars.clone()));
+            let patches_vec = patch_file.patches.into_iter().map(|patch| {
+                (
+                    patch,
+                    priority,
+                    mod_relative_path.to_path_buf(),
+                    vars.clone(),
+                )
+            });
 
             patches.extend(patches_vec);
         }
@@ -370,24 +393,37 @@ pub fn process_patches(
     Vec<(Patch, Priority, PathBuf)>,
     HashSet<String>,
     HashMap<String, String>,
+    Vec<WildMatch>,
 ) {
-    let mut targets: HashSet<String> = HashSet::new();
+    let mut targets: (HashSet<String>, Vec<WildMatch>) = (HashSet::new(), Vec::new());
     let mut patches: Vec<(Patch, Priority, PathBuf)> = Vec::new();
     let mut var_table: HashMap<String, String> = HashMap::new();
 
-    for (patch, priority, path, vars) in raw_patches {
+    for (mut patch, priority, path, vars) in raw_patches {
         // Extract targets from patches
-        match &patch {
+        match &mut patch {
             Patch::Copy(x) => {
                 x.target.insert_into(&mut targets);
             }
             Patch::Module(x) => {
-                targets.insert(x.before.clone().unwrap_or_default());
+                targets.0.insert(x.before.clone().unwrap_or_default());
             }
             Patch::Pattern(x) => {
+                let should_override_silent = match &x.target {
+                    Target::Single(str) => str == "*",
+                    Target::Multi(strs) => strs.iter().any(|x| x == "*"),
+                };
+                x.silent = x.silent || should_override_silent;
+
                 x.target.insert_into(&mut targets);
             }
             Patch::Regex(x) => {
+                let should_override_silent = match &x.target {
+                    Target::Single(str) => str == "*",
+                    Target::Multi(strs) => strs.iter().any(|x| x == "*"),
+                };
+                x.silent = x.silent || should_override_silent;
+                
                 x.target.insert_into(&mut targets);
             }
         }
@@ -399,7 +435,7 @@ pub fn process_patches(
         var_table.extend(vars);
     }
 
-    (patches, targets, var_table)
+    (patches, targets.0, var_table, targets.1)
 }
 
 /// Parse TOML content into a PatchFile
@@ -415,8 +451,6 @@ fn parse_patch_file(content: &str, file_identifier: &str, mod_dir: &Path) -> Res
     serde_ignored::deserialize(toml::Deserializer::new(&content), ignored_key_callback)
         .with_context(|| format!("Failed to parse patch file {file_identifier}"))
 }
-
-
 
 /// Helper to extract parent directory path with trailing slash
 fn get_parent(path: &str) -> String {
@@ -467,35 +501,49 @@ sources = ["inject.lua"]
         let (_, patches) = get_dir_patches(&mod_dir).unwrap();
 
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- injected");
+        assert_eq!(
+            patches[0].sources.get(Path::new("inject.lua")).unwrap(),
+            "-- injected"
+        );
     }
 
     #[test]
     fn zip_patches_preloads_sources() {
         let temp = TempDir::new().unwrap();
-        let zip = make_zip(&temp, "mod.zip", &[
-            ("lovely.toml", PATCH_TOML),
-            ("inject.lua", "-- from zip"),
-        ]);
+        let zip = make_zip(
+            &temp,
+            "mod.zip",
+            &[("lovely.toml", PATCH_TOML), ("inject.lua", "-- from zip")],
+        );
 
         let (_, patches) = get_zip_patches(&zip).unwrap();
 
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- from zip");
+        assert_eq!(
+            patches[0].sources.get(Path::new("inject.lua")).unwrap(),
+            "-- from zip"
+        );
     }
 
     #[test]
     fn zip_nested_mod_root() {
         let temp = TempDir::new().unwrap();
-        let zip = make_zip(&temp, "mod.zip", &[
-            ("Nested/lovely.toml", PATCH_TOML),
-            ("Nested/inject.lua", "-- nested"),
-        ]);
+        let zip = make_zip(
+            &temp,
+            "mod.zip",
+            &[
+                ("Nested/lovely.toml", PATCH_TOML),
+                ("Nested/inject.lua", "-- nested"),
+            ],
+        );
 
         let (_, patches) = get_zip_patches(&zip).unwrap();
 
         assert_eq!(patches.len(), 1);
-        assert_eq!(patches[0].sources.get(Path::new("inject.lua")).unwrap(), "-- nested");
+        assert_eq!(
+            patches[0].sources.get(Path::new("inject.lua")).unwrap(),
+            "-- nested"
+        );
     }
 
     #[test]
@@ -514,7 +562,8 @@ sources = ["inject.lua"]
         fs::write(
             mods.join("lovely/blacklist.txt"),
             "blocked_dir\nblocked.zip\n# comment\n\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Allowed dir mod
         let allowed = mods.join("allowed");
@@ -529,10 +578,11 @@ sources = ["inject.lua"]
         fs::write(blocked.join("inject.lua"), "").unwrap();
 
         // Blocked zip mod
-        make_zip(&temp, "blocked.zip", &[
-            ("lovely.toml", PATCH_TOML),
-            ("inject.lua", ""),
-        ]);
+        make_zip(
+            &temp,
+            "blocked.zip",
+            &[("lovely.toml", PATCH_TOML), ("inject.lua", "")],
+        );
         fs::rename(temp.path().join("blocked.zip"), mods.join("blocked.zip")).unwrap();
 
         let patches = load_patches_new(mods).unwrap();
@@ -581,7 +631,9 @@ sources = ["inject.lua"]
 
         let m = mods.join("mod");
         fs::create_dir_all(m.join("lovely")).unwrap();
-        fs::write(m.join("lovely/patch1.toml"), r#"
+        fs::write(
+            m.join("lovely/patch1.toml"),
+            r#"
 [manifest]
 version = "1.0.0"
 
@@ -590,8 +642,12 @@ version = "1.0.0"
 target = "a.lua"
 position = "append"
 payload = "-- a"
-"#).unwrap();
-        fs::write(m.join("lovely/patch2.toml"), r#"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            m.join("lovely/patch2.toml"),
+            r#"
 [manifest]
 version = "1.0.0"
 
@@ -600,7 +656,9 @@ version = "1.0.0"
 target = "b.lua"
 position = "append"
 payload = "-- b"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let patches = load_patches_new(mods).unwrap();
         assert_eq!(patches.len(), 2);
@@ -614,7 +672,9 @@ payload = "-- b"
 
         let m = mods.join("mod");
         fs::create_dir_all(&m).unwrap();
-        fs::write(m.join("lovely.toml"), r#"
+        fs::write(
+            m.join("lovely.toml"),
+            r#"
 [manifest]
 version = "1.0.0"
 
@@ -626,10 +686,13 @@ FOO = "bar"
 target = "game.lua"
 position = "append"
 payload = "-- hi"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let raw = load_patches_new(mods).unwrap();
-        let (patches, targets, vars) = process_patches(raw);
+        //todo: account for globs in this test
+        let (patches, targets, vars, _) = process_patches(raw);
 
         assert_eq!(patches.len(), 1);
         assert!(targets.contains("game.lua"));
