@@ -39,7 +39,7 @@ fn pattern_patches_no_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: None,
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -49,7 +49,7 @@ fn pattern_patches_no_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: None,
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -59,7 +59,7 @@ fn pattern_patches_no_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: None,
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -69,7 +69,7 @@ fn pattern_patches_no_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: None,
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
@@ -87,7 +87,7 @@ fn pattern_patches_with_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(1),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -97,7 +97,7 @@ fn pattern_patches_with_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(5),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -107,7 +107,7 @@ fn pattern_patches_with_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(1),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -117,7 +117,7 @@ fn pattern_patches_with_match() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(2),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
@@ -136,7 +136,7 @@ fn regex_patches_no_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: None,
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -147,7 +147,7 @@ fn regex_patches_no_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: None,
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -158,7 +158,7 @@ fn regex_patches_no_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: None,
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -169,7 +169,7 @@ fn regex_patches_no_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: None,
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
@@ -188,7 +188,7 @@ fn regex_patches_with_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(1),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -199,7 +199,7 @@ fn regex_patches_with_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(5),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -210,7 +210,7 @@ fn regex_patches_with_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(1),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -221,7 +221,7 @@ fn regex_patches_with_match() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(2),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
@@ -239,7 +239,7 @@ fn pattern_patches_position() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(1),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -249,7 +249,7 @@ fn pattern_patches_position() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(1),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
             PatternPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -259,7 +259,7 @@ fn pattern_patches_position() -> &'static [PatternPatch] {
                 match_indent: false,
                 times: Some(1),
                 overwrite: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
@@ -278,7 +278,7 @@ fn regex_patches_position() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(1),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -289,7 +289,7 @@ fn regex_patches_position() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(1),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
             RegexPatch {
                 target: Target::Single("sample_buffer.txt".to_string()),
@@ -300,7 +300,7 @@ fn regex_patches_position() -> &'static [RegexPatch] {
                 line_prepend: String::new(),
                 times: Some(1),
                 verbose: false,
-                name: None,
+                name: None, silent: false,
             },
         ]
     })
