@@ -319,15 +319,16 @@ impl Lovely {
         }
         let (patched, debug) = res.unwrap();
 
-        write_dump(
-            &self.mod_dir,
-            "game-dump",
-            &pretty_name,
-            &patched,
-            &PatchDebug::new(name),
-        );
-        write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
-
+        if !debug.entries.iter().all(|x| x.regions.is_empty()) {
+            write_dump(
+                &self.mod_dir,
+                "game-dump",
+                &pretty_name,
+                &patched,
+                &PatchDebug::new(name),
+            );
+            write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
+        }
         (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
     }
 }
