@@ -118,8 +118,6 @@ sources = [
 ]
 payload = "-- I'm extra code that isn't worth an extra file"
 
-[[patches]]
-
 # Inject a new module into the game *before* a target file it loaded.
 # USEFUL: For when you want to silo your code into a separate require-able module OR inject a "global" dependency before game / mod code begins execution.
 [[patches]]
