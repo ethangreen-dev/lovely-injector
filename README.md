@@ -25,7 +25,7 @@ If you can't find this folder, try pressing `Shift-Command-.` (period) to show h
 
 Note: You cannot run your game through Steam on Mac due to a bug within the Steam client. You must run it with the `run_lovely_macos.sh` script.
 
-**Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder within the mod directory. No exceptions!
+**Important**: Mods with Lovely patch files (`lovely.toml` or in `lovely/*.toml`) **must** be installed into their own folder (or zip file) within the mod directory. No exceptions!
 
 ### Linux Native
 
@@ -70,7 +70,7 @@ initSteamodded()
 print('{{lovely:var_name}}')
 '''
 match_indent = true
-times = 1
+times = 1 # Optional, when omitted all instances of the pattern will be replaced. Otherwise the first <times> instances will be replaced. 
 
 # Inject one or more lines of code before, after, at, or interwoven into one or more
 # Regex capture groups.
@@ -116,6 +116,9 @@ sources = [
     "debug/debug.lua",
     "loader/loader.lua",
 ]
+payload = "-- I'm extra code that isn't worth an extra file"
+
+[[patches]]
 
 # Inject a new module into the game *before* a target file it loaded.
 # USEFUL: For when you want to silo your code into a separate require-able module OR inject a "global" dependency before game / mod code begins execution.
@@ -135,13 +138,17 @@ name = "nativefs"
 
 ### Patch files
 
-Patch files are loaded from mod directories inside of the mod folder (`MOD_DIR`). Lovely will load any patch files present within `MOD_DIR/ModName/lovely/` or load a single patch from `MOD_DIR/ModName/lovely.toml`. If multiple patches are loaded they will be injected into the game in the order in which they are found.
+Patch files are loaded from mod directories inside of the mod folder (`MOD_DIR`). Lovely will load any patch files present within `MOD_DIR/ModName/lovely/` or load a single patch from `MOD_DIR/ModName/lovely.toml`. If multiple patches are loaded they will be injected into the game in the order by order of their priority.
 
 Paths defined within the patch are rooted by the mod's directory. For example, `core/deck.lua` resolves to `MOD_DIR/ModName/core/deck.lua`.
 
 ### Patch targets
 
-Each patch definition has a single patch target. These targets are the relative paths of source files when dumped from the game with a tool like 7zip. For example, one can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
+Each patch definition has a single patch target. These targets are typically the relative paths of source files when dumped from the game with a tool like 7zip. For example, one can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
+
+For certain games/libraries, files are loaded differently. Targets (or more specifically buffer names) can be arbitrarily anything.
+
+Lovely itself uses the format of `=[lovely <patchname> "<relative path to mod>"]` for buffers loaded via module patch.
 
 ### Patch debugging
 
