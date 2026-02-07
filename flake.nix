@@ -55,7 +55,6 @@
 
           doCheck = false;
 
-          useFetchCargoVendor = true;
           cargoLock = {
             lockFile = ./Cargo.lock;
             outputHashes."retour-0.4.0-alpha.2" = "sha256-GtLTjErXJIYXQaOFLfMgXb8N+oyHNXGTBD0UeyvbjrA=";
