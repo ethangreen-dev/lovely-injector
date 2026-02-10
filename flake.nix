@@ -2,7 +2,7 @@
   nixConfig.bash-prompt-prefix = ''\[\e[0;31m\](lovely) \e[0m'';
 
   inputs = {
-    # requires nix `>=v2.27` or determinate-nix `v3`, will be released in lix `v2.94`
+    # requires nix `>=v2.27`, determinate-nix `v3`, or lix `>=v2.94`
     self.submodules = true;
 
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
