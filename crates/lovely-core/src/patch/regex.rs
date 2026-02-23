@@ -32,6 +32,11 @@ pub struct RegexPatch {
     // by $index.
     pub payload: String,
 
+    // Whether a warning will appear if the patch does not match anything.
+    // Overridden to true for targets that are simply "*"
+    #[serde(default)]
+    pub silent: bool,
+
     // A string or Regex capture to prepend onto the start of each LINE of the payload.
     // This value defaults to an empty string.
     #[serde(default)]
@@ -85,7 +90,7 @@ impl RegexPatch {
             });
 
         let mut captures = re.captures_iter(input).collect_vec();
-        if captures.is_empty() {
+        if captures.is_empty() && !self.silent {
             let warning = format!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
             return Some(self.debug_from_warning_string(path, warning));
         }
