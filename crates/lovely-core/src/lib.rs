@@ -19,7 +19,7 @@ use regex_lite::Regex;
 use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
 
 use crate::patch::Target;
-use crate::dump::{PatchDebug, write_dump};
+use crate::dump::write_dump;
 
 pub mod chunk_vec_cursor;
 pub mod dump;
@@ -310,6 +310,7 @@ impl Lovely {
         };
 
         // Apply patches onto this buffer.
+        write_dump(&self.mod_dir, "game-dump", &pretty_name, &buf_str, None);
         let res = patch_table.apply_patches(name, buf_str, state);
         if res.is_err() {
             state.push(res.unwrap_err());
@@ -318,8 +319,7 @@ impl Lovely {
         }
         let (patched, debug) = res.unwrap();
 
-        write_dump(&self.mod_dir, "game-dump", &pretty_name, &patched, &PatchDebug::new(name));
-        write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
+        write_dump(&self.mod_dir, "dump", &pretty_name, &patched, Some(&debug));
 
         (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
     }
