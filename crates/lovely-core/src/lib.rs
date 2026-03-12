@@ -5,9 +5,10 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{c_int, CStr};
 use std::panic;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 use std::{env, fs};
+use std::time::Duration;
 
 use log::*;
 
@@ -15,6 +16,7 @@ use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{ModulePatch, Patch};
 use regex_lite::Regex;
+use parking_lot::RwLock;
 
 use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
 
@@ -46,16 +48,26 @@ unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
         }
     };
     let binding = Arc::clone(&lovely.patch_table);
-    let mut patch_table = binding.write().unwrap();
-    *patch_table = new_table;
-    state.push(true);
-    1
+    let patch_table = binding.try_write_for(Duration::from_secs(1));
+
+    match patch_table {
+        Some(mut t) => {
+            *t = new_table;
+            state.push(true);
+            1
+        },
+        None => {
+            state.push(false);
+            state.push("Could not aquire lock in a reasonable time. Possible deadlock prevented.");
+            2
+        }
+    }
 }
 
 unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let lovely = &RUNTIME.get().unwrap();
-    let vars = lovely.lua_vars.read().unwrap();
+    let vars = lovely.lua_vars.read();
     let val = vars.get(&key);
     if let Some(val) = val {
         state.push(val);
@@ -68,7 +80,7 @@ unsafe extern "C" fn setvar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let val = check_lua_string(state, 2);
     let lovely = &RUNTIME.get().unwrap();
-    let mut vars = lovely.lua_vars.write().unwrap();
+    let mut vars = lovely.lua_vars.write();
     vars.insert(key, val);
     0
 }
@@ -76,7 +88,7 @@ unsafe extern "C" fn setvar(state: *mut LuaState) -> c_int {
 unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
     let key = check_lua_string(state, 1);
     let lovely = &RUNTIME.get().unwrap();
-    let mut vars = lovely.lua_vars.write().unwrap();
+    let mut vars = lovely.lua_vars.write();
     let val = vars.remove(&key);
     if let Some(val) = val {
         state.push(val);
@@ -247,7 +259,7 @@ impl Lovely {
     ) -> u32 {
         // Install native function overrides.
         let binding = Arc::clone(&self.patch_table);
-        let patch_table = binding.read().unwrap();
+        let patch_table = binding.read();
         {
             if !sys::is_module_preloaded(state, "lovely") {
                 let closure: LuaFunc = sys::override_print;
@@ -265,7 +277,7 @@ impl Lovely {
                         Patch::Module(patch) => Some((patch, prio, path)),
                         _ => None,
                     })
-                    .filter(|(x, _, _)| !x.load_now)
+                .filter(|(x, _, _)| !x.load_now)
                     .sorted_by_key(|(_, &prio, _)| prio)
                     .map(|(x, _, path)| (x, path))
                     .collect();
@@ -333,7 +345,7 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
     let buf = check_lua_string(lua_state, 2);
     let mut num = 1;
     let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
+        let binding = RUNTIME.get().unwrap().patch_table.read();
         if binding.needs_patching(&buf_name) {
             let res = binding.apply_patches(&buf_name, &buf, lua_state);
             if res.is_err() {
