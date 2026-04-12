@@ -17,9 +17,10 @@ use patch::{ModulePatch, Patch};
 use regex_lite::Regex;
 
 use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
+use wildmatch::WildMatch;
 
+use crate::dump::{write_dump, PatchDebug};
 use crate::patch::Target;
-use crate::dump::{PatchDebug, write_dump};
 
 pub mod chunk_vec_cursor;
 pub mod dump;
@@ -311,16 +312,23 @@ impl Lovely {
 
         // Apply patches onto this buffer.
         let res = patch_table.apply_patches(name, buf_str, state);
-        if res.is_err() {
-            state.push(res.unwrap_err());
+        if let Err(err) = res {
+            state.push(err);
             // NOTE: Not really a great error but it doesn't handle the correcter errors right.
             return 3; // LUA_ERRSYNTAX
         }
         let (patched, debug) = res.unwrap();
 
-        write_dump(&self.mod_dir, "game-dump", &pretty_name, &patched, &PatchDebug::new(name));
-        write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
-
+        if self.dump_all || !debug.entries.iter().all(|x| x.regions.is_empty()) {
+            write_dump(
+                &self.mod_dir,
+                "game-dump",
+                &pretty_name,
+                &patched,
+                &PatchDebug::new(name),
+            );
+            write_dump(&self.mod_dir, "dump", &pretty_name, &patched, &debug);
+        }
         (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
     }
 }
@@ -336,9 +344,9 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
         let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
         if binding.needs_patching(&buf_name) {
             let res = binding.apply_patches(&buf_name, &buf, lua_state);
-            if res.is_err() {
+            if let Err(err) = res {
                 lua_state.push(false);
-                lua_state.push(res.unwrap_err());
+                lua_state.push(err);
                 num = 2;
                 return;
             }
@@ -360,19 +368,27 @@ unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
 impl Target {
     pub fn can_apply(&self, target: &str) -> bool {
         match self {
-            Self::Single(str) => str == target,
-            Self::Multi(strs) => strs.iter().any(|x| x == target),
+            Self::Single(str) => WildMatch::new(str).matches(target),
+            Self::Multi(strs) => strs.iter().any(|x| WildMatch::new(x).matches(target)),
         }
     }
 
-    pub fn insert_into(&self, targets: &mut HashSet<String>) {
+    pub fn insert_into(&self, targets: &mut (HashSet<String>, Vec<WildMatch>)) {
         match self {
             Self::Single(str) => {
-                targets.insert(str.clone());
+                if str.contains('?') || str.contains('*') {
+                    targets.1.push(WildMatch::new(str));
+                } else {
+                    targets.0.insert(str.clone());
+                }
             }
             Self::Multi(strs) => {
                 for target in strs.iter() {
-                    targets.insert(target.clone());
+                    if target.contains('?') || target.contains('*') {
+                        targets.1.push(WildMatch::new(target));
+                    } else {
+                        targets.0.insert(target.clone());
+                    }
                 }
             }
         }
