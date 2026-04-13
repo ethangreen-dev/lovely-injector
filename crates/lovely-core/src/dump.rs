@@ -117,7 +117,7 @@ pub fn write_dump(
     dir_name: &str,
     name: &str,
     buffer: &str,
-    debug: &PatchDebug,
+    debug: Option<&PatchDebug>,
 ) {
     if name.chars().count() > 100 {
         return;
@@ -149,14 +149,19 @@ pub fn write_dump(
         return;
     }
 
-    match serde_json::to_string_pretty(debug) {
-        Ok(json) => {
-            if let Err(e) = fs::write(&json_path, json) {
-                log::error!("Failed to write debug JSON to {json_path:?}: {e:?}");
+    match debug {
+        Some(debug) => {
+            match serde_json::to_string_pretty(debug) {
+                Ok(json) => {
+                    if let Err(e) = fs::write(&json_path, json) {
+                        log::error!("Failed to write debug JSON to {json_path:?}: {e:?}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to serialize debug info: {e:?}");
+                }
             }
         }
-        Err(e) => {
-            log::error!("Failed to serialize debug info: {e:?}");
-        }
+        None => return,
     }
 }
