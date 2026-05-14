@@ -78,7 +78,7 @@ jobs:
         target:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,18 +90,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Install Mac SDK
-        run: |
-          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX10.9.sdk.tar.xz" | tar -J -x -C /opt
-          curl -L "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz" | tar -J -x -C /opt
-          echo "SDKROOT=/opt/MacOSX11.3.sdk" >> $GITHUB_ENV
-
-      - name: Install cargo-zigbuild
-        run: |
-          pip3 install ziglang==0.13.0.post1 cargo-zigbuild
-
       - name: Build
-        run: cargo zigbuild --target ${{ matrix.target }} --package lovely-unix --release
+        run: cargo build --target ${{ matrix.target }} --package lovely-unix --release
 
       - name: Compress tar.gz
         run: |
