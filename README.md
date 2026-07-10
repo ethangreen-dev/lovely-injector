@@ -142,7 +142,7 @@ Paths defined within the patch are rooted by the mod's directory. For example, `
 
 ### Patch targets
 
-Each patch definition has a single patch target. These targets are typically the relative paths of source files when dumped from the game with a tool like 7zip. For example, one can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
+Each patch definition has one or more patch targets. These targets are typically the relative paths of source files when dumped from the game with a tool like 7zip. For example, one can target a top-level file like `main.lua`, or one in a subdirectory like `engine/event.lua`.
 
 For certain games/libraries, files are loaded differently. Targets (or more specifically buffer names) can be arbitrarily anything.
 
