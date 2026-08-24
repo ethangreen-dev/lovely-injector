@@ -1,5 +1,4 @@
-use lovely_core::log::*;
-use lovely_core::sys::{LuaLib, LuaState};
+use lovely_core::sys::{LuaLib, lua_State};
 use std::panic;
 
 use lovely_core::Lovely;
@@ -8,7 +7,7 @@ use once_cell::sync::OnceCell;
 static RUNTIME: OnceCell<&Lovely> = OnceCell::new();
 
 type LoadBufferX =
-unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32;
+unsafe extern "C" fn(*mut lua_State, *const u8, usize, *const u8, *const u8) -> i32;
 
 static RECALL: OnceCell<LoadBufferX> = OnceCell::new();
 
@@ -17,11 +16,6 @@ unsafe extern "C" fn lovely_init(
     loadbufferx: LoadBufferX, lua: LuaLib,
 ) {
     if RUNTIME.get().is_none() {
-        panic::set_hook(Box::new(|x| {
-            let message = format!("lovely-injector has crashed: \n{x}");
-            error!("{message}");
-        }));
-
         RECALL.set(loadbufferx).expect("Shit's erroring");
 
         let rt = Lovely::init(
@@ -37,12 +31,12 @@ unsafe extern "C" fn lovely_init(
 
 #[no_mangle]
 unsafe extern "C" fn lovely_apply_patches(
-    state: *mut LuaState,
+    state: *mut lua_State,
     buf_ptr: *const u8,
     size: usize,
     name_ptr: *const u8,
     mode_ptr: *const u8,
-) -> u32 {
+) -> i32 {
     let rt = RUNTIME.get_unchecked();
     rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr)
 }

@@ -4,9 +4,10 @@ use std::{
     ptr,
 };
 
-use crate::sys::{self, lua_identity_closure, lua_err_identity_closure, LuaState, LuaStateTrait};
+use crate::sys::{self, lua_identity_closure, lua_err_identity_closure, lua_State, LuaStateTrait};
 use crate::RUNTIME;
 use serde::{Deserialize, Serialize};
+use anyhow::bail;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModulePatch {
@@ -40,9 +41,9 @@ impl ModulePatch {
     pub unsafe fn apply(
         &self,
         file_name: &str,
-        state: *mut LuaState,
+        state: *mut lua_State,
         path: &Path,
-    ) -> Result<bool, String> {
+    ) -> anyhow::Result<bool> {
         // Stop if we're not at the correct insertion point.
         if self.load_now && self.before.as_ref().unwrap() != file_name {
             return Ok(false);
@@ -86,7 +87,7 @@ impl ModulePatch {
             sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
             sys::lua_settop(state, stack_top);
             if self.load_now {
-                return Err("An error occured loading a load_now module:\n\nError: ".to_owned() + &err);
+                bail!("An error occured loading a load_now module:\n\nError: {}", &err);
             } else {
                 return Ok(false);
             }
@@ -108,7 +109,7 @@ impl ModulePatch {
                 sys::lua_setfield(state, field_index, module_cstr.into_raw() as _);
                 sys::lua_settop(state, stack_top);
                 sys::lua_settop(state, stack_top);
-                return Err("An error occured evaluating a load_now module:\n\nError: ".to_owned() + &err);
+                bail!("An error occured evaluating a load_now module:\n\nError: {}", &err);
             }
             // Wrap this in the identity closure function
             state.push_closure(lua_identity_closure, 1);

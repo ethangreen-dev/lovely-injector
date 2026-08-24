@@ -1,11 +1,13 @@
-use anyhow::Result;
+use anyhow::{Result, Context, anyhow};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::dump::{ByteDebugEntry, PatchDebug};
 use crate::patch::{loader, vars};
 use crate::patch::{Patch, Priority};
-use crate::sys::{preload_module, LuaFunc, LuaState, LuaTable};
+use crate::sys::{preload_module, lua_State, no_err};
+use crate::{apply_patches, get_log_path, get_var, reload_patches, remove_var, set_var};
+use mlua::Lua;
 use crop::Rope;
 use itertools::Itertools;
 use log::*;
@@ -54,27 +56,29 @@ impl PatchTable {
     /// Inject lovely metadata into the game.
     /// # Safety
     /// Unsafe due to internal unchecked usages of raw lua state.
-    pub unsafe fn inject_metadata(&self, state: *mut LuaState) {
-        let mod_dir = self.mod_dir.to_str().unwrap().replace('\\', "/");
+    pub unsafe fn inject_metadata(&self, state: *mut lua_State) -> Result<()> {
+        let mod_dir = self.mod_dir.to_str().ok_or(anyhow!("Could not convert mod dir to a string?"))?.replace('\\', "/");
         let repo = "https://github.com/ethangreen-dev/lovely-injector";
 
-        // Import the functions needed for injection
-        use crate::{apply_patches, get_log_path, getvar, reload_patches, removevar, setvar};
+        let lua = Lua::get_or_init_from_ptr(state);
+
+        let table = lua.create_table()?;
+        table.set("repo", repo)?;
+        table.set("version", env!("CARGO_PKG_VERSION"))?;
+        table.set("mod_dir", mod_dir)?;
+        table.set("reload_patches", lua.create_function(no_err(reload_patches))?)?;
+        table.set("apply_patches", lua.create_function(no_err(apply_patches))?)?;
+        table.set("set_var", lua.create_function(no_err(set_var))?)?;
+        table.set("get_var", lua.create_function(no_err(get_var))?)?;
+        table.set("remove_var", lua.create_function(no_err(remove_var))?)?;
+        table.set("log_path", get_log_path().ok_or(anyhow!("Log path is not real set?!"))?)?;
 
         preload_module(
             state,
             "lovely",
-            LuaTable::new()
-                .add_var("repo", repo)
-                .add_var("version", env!("CARGO_PKG_VERSION"))
-                .add_var("mod_dir", mod_dir)
-                .add_var("reload_patches", reload_patches as LuaFunc)
-                .add_var("apply_patches", apply_patches as LuaFunc)
-                .add_var("set_var", setvar as LuaFunc)
-                .add_var("get_var", getvar as LuaFunc)
-                .add_var("remove_var", removevar as LuaFunc)
-                .add_var("log_path", get_log_path().unwrap()),
+            table
         );
+        Ok(())
     }
 
     /// Apply one or more patches onto the target's buffer.
@@ -85,8 +89,8 @@ impl PatchTable {
         &self,
         target: &str,
         buffer: &str,
-        lua_state: *mut LuaState,
-    ) -> Result<(String, PatchDebug), String> { // Buffer Content, Debug info, Error message
+        lua_state: *mut lua_State,
+    ) -> Result<(String, PatchDebug)> {
         let target = target.strip_prefix('@').unwrap_or(target);
 
         let module_patches = self
@@ -116,8 +120,8 @@ impl PatchTable {
             .filter(|(patch, _, _)| matches!(patch, Patch::Pattern(..)))
             .chain(
                 self.patches
-                    .iter()
-                    .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
+                .iter()
+                .filter(|(patch, _, _)| matches!(patch, Patch::Regex(..))),
             )
             .sorted_by_key(|(_, prio, _)| prio)
             .map(|(patch, _, path)| (patch, path))
@@ -158,7 +162,7 @@ impl PatchTable {
         for (patch, path) in pattern_and_regex {
             let result = match patch {
                 Patch::Pattern(x) => x.apply(target, &mut rope, path),
-                Patch::Regex(x) => x.apply(target, &mut rope, path),
+                Patch::Regex(x) => x.apply(target, &mut rope, path)?,
                 _ => unreachable!(),
             };
 
@@ -187,7 +191,7 @@ impl PatchTable {
         // TODO I don't think it's necessary to split into lines
         // and convert the rope to Strings? seems overcomplicated
         for line in patched_lines.iter_mut() {
-            vars::apply_var_interp(line, &self.vars);
+            vars::apply_var_interp(line, &self.vars).with_context(|| format!("Failed to interpolate lovely variable in {:?}", target))?;
         }
 
         let patched = patched_lines.concat();

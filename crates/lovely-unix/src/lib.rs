@@ -1,7 +1,7 @@
 mod lualib;
 
 use lovely_core::log::*;
-use lovely_core::sys::LuaState;
+use lovely_core::sys::lua_State;
 use lualib::LUA_LIBRARY;
 use std::{
     env,
@@ -15,7 +15,7 @@ use lovely_core::Lovely;
 static RUNTIME: OnceLock<&Lovely> = OnceLock::new();
 
 type LoadBuffer =
-    unsafe extern "C" fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32;
+    unsafe extern "C" fn(*mut lua_State, *const u8, usize, *const u8, *const u8) -> i32;
 static LUA_LOADBUFFERX: LazyLock<LoadBuffer> =
     LazyLock::new(|| unsafe { *LUA_LIBRARY.get(b"luaL_loadbufferx").unwrap() });
 
@@ -31,11 +31,11 @@ static RECALL: LazyLock<LoadBuffer> = LazyLock::new(|| unsafe {
 #[no_mangle]
 #[allow(non_snake_case)]
 unsafe extern "C" fn luaL_loadbuffer(
-    state: *mut LuaState,
+    state: *mut lua_State,
     buf_ptr: *const u8,
     size: usize,
     name_ptr: *const u8,
-) -> u32 {
+) -> i32 {
     RUNTIME.get().map_or_else(
         || (LUA_LOADBUFFERX)(state, buf_ptr, size, name_ptr, std::ptr::null()),
         |rt| rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, std::ptr::null()),
@@ -43,12 +43,12 @@ unsafe extern "C" fn luaL_loadbuffer(
 }
 
 unsafe extern "C" fn lua_loadbufferx_detour(
-    state: *mut LuaState,
+    state: *mut lua_State,
     buf_ptr: *const u8,
     size: usize,
     name_ptr: *const u8,
     mode_ptr: *const u8,
-) -> u32 {
+) -> i32 {
     RUNTIME.get().map_or_else(
         || (LUA_LOADBUFFERX)(state, buf_ptr, size, name_ptr, mode_ptr),
         |rt| rt.apply_buffer_patches(state, buf_ptr, size, name_ptr, mode_ptr),
@@ -57,11 +57,6 @@ unsafe extern "C" fn lua_loadbufferx_detour(
 
 #[ctor::ctor]
 unsafe fn construct() {
-    panic::set_hook(Box::new(|x| {
-        let message = format!("lovely-injector has crashed: \n{x}");
-        error!("{message}");
-    }));
-
     let args: Vec<_> = env::args().collect();
 
     if args.contains(&"--vanilla".to_string()) || args.contains(&"-v".to_string()) {

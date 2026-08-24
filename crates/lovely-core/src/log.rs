@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{OnceLock, RwLock};
+use std::panic;
 
 use chrono::Local;
 
@@ -65,7 +66,13 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
         log_path: String::from(log_path.to_str().unwrap()),
     };
 
-    log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info))
+    let res = log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info));
+
+    panic::set_hook(Box::new(|x| {
+        error!("lovely-injector panic: \n{x}");
+    }));
+
+    res
 }
 
 pub fn get_log_path() -> Option<String> {

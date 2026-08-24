@@ -1,4 +1,4 @@
-local sys_file = assert(io.open("../lovely-core/src/sys.rs"))
+local sys_file = assert(io.open("../mlua-sys/src/lua51/lua.rs"))
 local inMacro = false
 
 local types = {
@@ -11,12 +11,34 @@ local types = {
 	usize = "size_t",
 	isize = "ssize_t",
 	f64 = "double",
+	VaList = "va_list",
+	-- HACK: We love pointer pointers (i'm to lazy to fix this properly)
+	["*mut c_void"] = "void*",
+	["*const c_char"] = "char*",
 }
 
+-- Direct maps (as mlua-sys uses)
+for _, v in ipairs{
+	"lua_Alloc",
+	"lua_State",
+	"lua_CFunction",
+	"lua_Number",
+	"lua_Integer",
+	"lua_Reader",
+	"lua_Writer",
+	"lua_Debug",
+	"lua_Hook",
+	"luaL_Reg",
+	"luaL_Buffer",
+} do
+	assert(not types[v], "Duplicated type register");
+	types[v] = v
+end
+
 local functionPatches = { -- Functions where rust has different types
-	luaL_register = {
+	luaL_checkoption = {
 		args = {
-			[3] = "const luaL_Reg *l"
+			[4] = "const char *const lst[]"
 		}
 	},
 }
@@ -24,6 +46,7 @@ local functionPatches = { -- Functions where rust has different types
 local function convertType(str, name)
 	local pointer, mod, type = str:match("(%*)(%S+)%s+(.+)")
 	if not pointer then
+		str = str:match("^Option<([%w_]+)>$") or str -- Drop options (NULLPTR)
 		type = types[str]
 		assert(type, "Unknown type " .. str)
 		if name then
@@ -67,14 +90,22 @@ local functions = {
 
 local luaLib = ""
 local names = {}
+local funcMatch = "p?u?b? unsafe extern \"C%-unwind\" fn ([%w_]+)(%b())([^;]*)"
 
 for line in sys_file:lines() do
 	if not inMacro then
 		if line == "generate! (LuaLib {" then inMacro = true end
+	elseif line:match("^%s*//") or line:match("^%s*$") then
+		-- Comment or blank line, do nothing
+	elseif line:match("%} raw %{") then
+		-- Raw functions are defined a bit differently
+		funcMatch = "p?u?b? ?([%w_]+): unsafe extern \"C%-unwind\" fn(%b())([^,]*)"
 	else
 		if line == "});" then break end
-		local name, argsStr, ret = line:match("pub unsafe extern \"C\" fn ([%w_]+)(%b())([^;]*)")
+		local name, argsStr, ret = line:match(funcMatch)
+		assert(name, "Line did not match pattern!\n" .. line)
 		name = name:gsub("lual", "luaL")
+		name = name:gsub("_$", "")
 		local args = {}
 		for name, type in string.gmatch(argsStr, "([%w_]+):%s(.-)[,)]") do
 			table.insert(args, convertType(type, name))

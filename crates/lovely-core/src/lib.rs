@@ -2,12 +2,13 @@
 
 use core::slice;
 use std::collections::{HashMap, HashSet};
-use std::ffi::{c_int, CStr};
+use std::ffi::{CStr};
 use std::panic;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 use std::{env, fs};
+use anyhow::{Context, Result};
 
 use log::*;
 
@@ -15,8 +16,9 @@ use getargs::{Arg, Options};
 use itertools::Itertools;
 use patch::{ModulePatch, Patch};
 use regex_lite::Regex;
+use mlua::Lua;
 
-use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
+use sys::{lua_CFunction, LuaLib, lua_State, LuaStateTrait, LUA};
 
 use crate::patch::Target;
 use crate::dump::write_dump;
@@ -32,57 +34,37 @@ pub const LOVELY_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static RUNTIME: OnceLock<Lovely> = OnceLock::new();
 
 type LoadBuffer =
-    dyn Fn(*mut LuaState, *const u8, usize, *const u8, *const u8) -> u32 + Send + Sync + 'static;
+    dyn Fn(*mut lua_State, *const u8, usize, *const u8, *const u8) -> i32 + Send + Sync + 'static;
 
-unsafe extern "C" fn reload_patches(state: *mut LuaState) -> c_int {
+
+fn reload_patches(_lua: &Lua, _: ()) -> Result<bool> {
     let lovely = &RUNTIME.get().unwrap();
-    let result = PatchTable::load(&lovely.mod_dir);
-    let new_table = match result {
-        Ok(t) => t,
-        Err(e) => {
-            state.push(false);
-            state.push(format!("{:?}", e));
-            return 2;
-        }
-    };
+    let new_table = PatchTable::load(&lovely.mod_dir)?;
     let binding = Arc::clone(&lovely.patch_table);
     let mut patch_table = binding.write().unwrap();
     *patch_table = new_table;
-    state.push(true);
-    1
+
+    Ok(true)
 }
 
-unsafe extern "C" fn getvar(state: *mut LuaState) -> c_int {
-    let key = check_lua_string(state, 1);
+fn get_var(_lua: &Lua, key: String) -> Option<String> {
     let lovely = &RUNTIME.get().unwrap();
     let vars = lovely.lua_vars.read().unwrap();
     let val = vars.get(&key);
-    if let Some(val) = val {
-        state.push(val);
-        return 1;
-    }
-    0
+    val.cloned()
 }
 
-unsafe extern "C" fn setvar(state: *mut LuaState) -> c_int {
-    let key = check_lua_string(state, 1);
-    let val = check_lua_string(state, 2);
+fn set_var(_lua: &Lua, (key, val): (String, String)) {
     let lovely = &RUNTIME.get().unwrap();
     let mut vars = lovely.lua_vars.write().unwrap();
     vars.insert(key, val);
-    0
 }
 
-unsafe extern "C" fn removevar(state: *mut LuaState) -> c_int {
-    let key = check_lua_string(state, 1);
+fn remove_var(_lua: &Lua, key: String) -> Option<String> {
     let lovely = &RUNTIME.get().unwrap();
     let mut vars = lovely.lua_vars.write().unwrap();
     let val = vars.remove(&key);
-    if let Some(val) = val {
-        state.push(val);
-        return 1;
-    }
-    0
+    val
 }
 
 pub struct Lovely {
@@ -230,6 +212,30 @@ impl Lovely {
             .unwrap_or_else(|_| panic!("Shit's erroring"));
         RUNTIME.get().unwrap()
     }
+    pub unsafe fn apply_buffer_patches(
+        &self,
+        state: *mut lua_State,
+        buf_ptr: *const u8,
+        size: usize,
+        name_ptr: *const u8,
+        mode_ptr: *const u8,
+    ) -> i32 {
+       let res = self.apply_buffer_patches_internal(state, buf_ptr, size, name_ptr);
+       if res.is_err() {
+           state.push(format!("{:?}", res.unwrap_err()));
+           // NOTE: Not really the most correct error code but it doesn't handle the correcter errors right.
+           return sys::LUA_ERRSYNTAX;
+       }
+
+       let res = res.unwrap();
+       // No patching to be done, run directly
+       if res.is_none() {
+           return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
+       }
+
+       let patched = res.unwrap();
+       (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
+    }
 
     /// Apply patches onto the raw buffer.
     ///
@@ -237,25 +243,27 @@ impl Lovely {
     /// This function is unsafe because
     /// - It interacts and manipulates memory directly through native pointers
     /// - It interacts, calls, and mutates native lua state through native pointers
-    pub unsafe fn apply_buffer_patches(
+    /// 
+    /// Return value is OK(Some()) if buffer is patched, Ok(None) if buffer is not patched and
+    /// Err() if an error occurred
+    pub unsafe fn apply_buffer_patches_internal(
         &self,
-        state: *mut LuaState,
+        state: *mut lua_State,
         buf_ptr: *const u8,
         size: usize,
         name_ptr: *const u8,
-        mode_ptr: *const u8,
-    ) -> u32 {
+    ) -> Result<Option<String>> {
         // Install native function overrides.
         let binding = Arc::clone(&self.patch_table);
         let patch_table = binding.read().unwrap();
         {
             if !sys::is_module_preloaded(state, "lovely") {
-                let closure: LuaFunc = sys::override_print;
+                let closure: lua_CFunction = sys::override_print;
                 state.push(closure);
                 sys::lua_setfield(state, sys::LUA_GLOBALSINDEX, c"print".as_ptr());
 
                 // Inject Lovely functions into the runtime.
-                patch_table.inject_metadata(state);
+                patch_table.inject_metadata(state)?;
 
                 // Inject mod modules into runtime
                 let module_patches: Vec<_> = patch_table
@@ -282,21 +290,21 @@ impl Lovely {
                 // There's practically 0 use-case for patching a target with a bad chunk name,
                 // so pump a warning to the console and recall.
                 warn!("The chunk name at {name_ptr:?} contains invalid UTF-8, skipping: {e}");
-                return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
+                return Ok(None);
             }
         };
 
         // Stop here if no valid patch exists for this target.
         if !patch_table.needs_patching(name) && !self.dump_all {
-            return (self.loadbuffer)(state, buf_ptr, size, name_ptr, mode_ptr);
+            return Ok(None);
         }
 
         // Prepare buffer for patching
         // Convert the buffer from [u8] to utf8 str.
         let buf = slice::from_raw_parts(buf_ptr, size);
-        let buf_str = str::from_utf8(buf).unwrap_or_else(|e| {
-            panic!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8: {e:?}")
-        });
+        let buf_str = str::from_utf8(buf).with_context(|| {
+            format!("The byte buffer '{buf:?}' for target {name} contains invalid UTF-8")
+        })?;
 
         let regex = Regex::new(r#"=\[(\w+)(?: (\S+))? "([^"]+)"\]"#).unwrap();
         let pretty_name = if let Some(capture) = regex.captures(name) {
@@ -311,49 +319,31 @@ impl Lovely {
 
         // Apply patches onto this buffer.
         write_dump(&self.mod_dir, "game-dump", &pretty_name, &buf_str, None);
-        let res = patch_table.apply_patches(name, buf_str, state);
-        if res.is_err() {
-            state.push(res.unwrap_err());
-            // NOTE: Not really a great error but it doesn't handle the correcter errors right.
-            return 3; // LUA_ERRSYNTAX
-        }
-        let (patched, debug) = res.unwrap();
+        let (patched, debug)  = patch_table.apply_patches(name, buf_str, state)?;
 
         write_dump(&self.mod_dir, "dump", &pretty_name, &patched, Some(&debug));
 
-        (self.loadbuffer)(state, patched.as_ptr(), patched.len(), name_ptr, mode_ptr)
+        return Ok(Some(patched));
     }
 }
 
 // Import PatchTable from the new location
 use crate::patch::table::PatchTable;
 
-unsafe extern "C" fn apply_patches(lua_state: *mut LuaState) -> c_int {
-    let buf_name = check_lua_string(lua_state, 1);
-    let buf = check_lua_string(lua_state, 2);
-    let mut num = 1;
-    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
-        if binding.needs_patching(&buf_name) {
-            let res = binding.apply_patches(&buf_name, &buf, lua_state);
-            if res.is_err() {
-                lua_state.push(false);
-                lua_state.push(res.unwrap_err());
-                num = 2;
-                return;
-            }
-            let (patched, _debug) = res.unwrap();
-            lua_state.push(patched);
-        } else {
-            lua_state.push(buf)
-        }
-    }));
-    if result.is_ok() {
-        num
+fn apply_patches(lua: &Lua, (name, buf): (String, String)) -> Result<String> {
+    let binding = RUNTIME.get().unwrap().patch_table.read().unwrap();
+    if binding.needs_patching(&name) {
+        let res = unsafe {
+            lua.exec_raw_lua(|rawlua| {
+                let state = rawlua.state();
+                binding.apply_patches(&name, &buf, state)
+            })
+        };
+
+        let (patched, _debug) = res?;
+        return Ok(patched);
     } else {
-        lua_state.push(false);
-        lua_state.push("Internal lovely error: Failed to acquire the lovely runtime");
-        2
+        return Ok(buf);
     }
 }
 

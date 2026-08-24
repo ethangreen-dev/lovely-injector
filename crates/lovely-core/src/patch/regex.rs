@@ -8,6 +8,7 @@ use regex_cursor::Input;
 use crop::Rope;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use anyhow::{Context, Result};
 
 use crate::chunk_vec_cursor::IntoCursor;
 use crate::dump::{ByteDebugEntry, ByteRegion, PatchSource, DebugPatchType};
@@ -62,9 +63,9 @@ impl RegexPatch {
         }
     }
 
-    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Option<ByteDebugEntry> {
+    pub fn apply(&self, target: &str, rope: &mut Rope, path: &Path) -> Result<Option<ByteDebugEntry>> {
         if !self.target.can_apply(target) {
-            return None;
+            return Ok(None);
         }
 
         let input = Input::new(rope.into_cursor());
@@ -76,18 +77,18 @@ impl RegexPatch {
                     .ignore_whitespace(self.verbose),
             )
             .build(&self.pattern)
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to compile Regex '{}' for regex patch from {}: {e:?}",
-                    path.display(),
-                    self.pattern
+            .with_context(|| {
+                format!(
+                    "Failed to compile Regex '{}' for regex patch from {}",
+                    self.pattern,
+                    path.display()
                 )
-            });
+            })?;
 
         let mut captures = re.captures_iter(input).collect_vec();
         if captures.is_empty() {
             let warning = format!("Regex '{}' on target '{target}' for regex patch from {} resulted in no matches", self.pattern.escape_debug(), path.display());
-            return Some(self.debug_from_warning_string(path, warning));
+            return Ok(Some(self.debug_from_warning_string(path, warning)));
         }
         let mut warnings = Vec::new();
         if let Some(times) = self.times {
@@ -153,12 +154,12 @@ impl RegexPatch {
 
                 if let Ok(idx) = group_name.parse::<usize>() {
                     groups.get_group(idx)
-                        .unwrap_or_else(|| 
-                            panic!("The capture group at index {idx} could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))
+                        .with_context(|| 
+                            format!("The capture group at index {idx} could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))?
                 } else {
                     groups.get_group_by_name(&group_name)
-                        .unwrap_or_else(|| 
-                            panic!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))
+                        .with_context(|| 
+                            format!("The capture group with name '{group_name}' could not be found in '{base_str}' with the Regex '{}' for regex patch from {}", self.pattern, path.display()))?
                 }
             };
 
@@ -255,13 +256,13 @@ impl RegexPatch {
             }
         }
 
-        Some(ByteDebugEntry {
+        Ok(Some(ByteDebugEntry {
             patch_source: PatchSource {
                 file: path.display().to_string(),
                 pattern: Some(self.pattern.clone()),
                 patch_type: DebugPatchType::Regex,
             },
             regions: byte_regions,
-            warnings: if warnings.is_empty() {None} else {Some(warnings)}, })
+            warnings: if warnings.is_empty() {None} else {Some(warnings)}, }))
     }
 }

@@ -4,3 +4,4 @@ members = ["crates/*"]
 
 [patch.crates-io]
 dobby-sys = { path = "crates/dobby-sys" }
+mlua-sys = { path = "crates/mlua-sys" }
