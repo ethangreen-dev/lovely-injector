@@ -5,6 +5,7 @@ use std::slice;
 use std::sync::OnceLock;
 
 use itertools::Itertools;
+#[cfg(feature = "libloading")]
 use libloading::Library;
 
 use log::info;
@@ -83,6 +84,7 @@ generate! (LuaLib {
     pub unsafe extern "C" fn lual_checklstring(state: *mut LuaState, index: c_int, len: *mut usize) -> *const char;
 });
 
+#[cfg(feature = "libloading")]
 impl LuaLib {
     /// Construct a LuaLib from a loaded library.
     /// # Safety

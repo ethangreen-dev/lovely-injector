@@ -61,20 +61,21 @@ impl PatchTable {
         // Import the functions needed for injection
         use crate::{apply_patches, get_log_path, getvar, reload_patches, removevar, setvar};
 
-        preload_module(
-            state,
-            "lovely",
-            LuaTable::new()
-                .add_var("repo", repo)
-                .add_var("version", env!("CARGO_PKG_VERSION"))
-                .add_var("mod_dir", mod_dir)
-                .add_var("reload_patches", reload_patches as LuaFunc)
-                .add_var("apply_patches", apply_patches as LuaFunc)
-                .add_var("set_var", setvar as LuaFunc)
-                .add_var("get_var", getvar as LuaFunc)
-                .add_var("remove_var", removevar as LuaFunc)
-                .add_var("log_path", get_log_path().unwrap()),
-        );
+        let mut lovely = LuaTable::new()
+            .add_var("repo", repo)
+            .add_var("version", env!("CARGO_PKG_VERSION"))
+            .add_var("mod_dir", mod_dir)
+            .add_var("reload_patches", reload_patches as LuaFunc)
+            .add_var("apply_patches", apply_patches as LuaFunc)
+            .add_var("set_var", setvar as LuaFunc)
+            .add_var("get_var", getvar as LuaFunc)
+            .add_var("remove_var", removevar as LuaFunc);
+
+        if let Some(log_path) = get_log_path() {
+            lovely = lovely.add_var("log_path", log_path);
+        }
+
+        preload_module(state, "lovely", lovely);
     }
 
     /// Apply one or more patches onto the target's buffer.

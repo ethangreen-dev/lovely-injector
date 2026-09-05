@@ -8,7 +8,7 @@ name = "lovely"
 crate-type = ["staticlib"]
 
 [dependencies]
-lovely-core = { version ="0.9.0", path = "../lovely-core" }
+lovely-core = { version ="0.9.0", path = "../lovely-core", default-features = false, features = ["dirs", "zip-full"] }
 
 once_cell = "1.19.0"
 ctor = "0.2.7"
