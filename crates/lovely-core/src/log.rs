@@ -1,8 +1,8 @@
+use jiff::Zoned;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{OnceLock, RwLock};
-use jiff::Zoned;
 
 // Exports for convenience.
 pub use log::{debug, error, info, trace, warn, LevelFilter};
@@ -13,8 +13,8 @@ static LOGGER: OnceLock<LovelyLogger> = OnceLock::new();
 
 struct LovelyLogger {
     use_console: bool,
-    log_file: RwLock<File>,
-    log_path: String,
+    log_file: Option<RwLock<File>>,
+    log_path: Option<String>,
 }
 
 impl Log for LovelyLogger {
@@ -36,15 +36,32 @@ impl Log for LovelyLogger {
         }
 
         // Append the line to the log file, creating it if it does not exist.
-        let mut file = self.log_file.write().unwrap();
-        file.write_all(msg.as_bytes()).unwrap();
-        file.write_all("\n".as_bytes()).unwrap();
+        if let Some(log_file) = &self.log_file {
+            let mut file = log_file.write().unwrap();
+            file.write_all(msg.as_bytes()).unwrap();
+            file.write_all("\n".as_bytes()).unwrap();
+        }
     }
 
     fn flush(&self) {}
 }
 
 pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
+    // No log file on Switch, every synchronous SD card write costs CPU time
+    let logger = if cfg!(target_os = "switch") {
+        LovelyLogger {
+            use_console: true,
+            log_file: None,
+            log_path: None,
+        }
+    } else {
+        file_logger(log_dir)
+    };
+
+    log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info))
+}
+
+fn file_logger(log_dir: &Path) -> LovelyLogger {
     // We create a log file within the log directory of name lovely-datetime.log
     if !log_dir.is_dir() {
         fs::create_dir_all(log_dir).unwrap();
@@ -53,21 +70,18 @@ pub fn init(log_dir: &Path) -> Result<(), SetLoggerError> {
     let now = Zoned::now();
     let timestamp = now.strftime("%Y.%m.%d-%H.%M.%S");
 
-
     let log_name = format!("lovely-{timestamp}.log");
     let log_path = log_dir.join(log_name);
     let log_file = File::create(&log_path)
         .unwrap_or_else(|e| panic!("Failed to create log file at {log_path:?}: {e}"));
 
-    let logger = LovelyLogger {
+    LovelyLogger {
         use_console: true,
-        log_file: RwLock::new(log_file),
-        log_path: String::from(log_path.to_str().unwrap()),
-    };
-
-    log::set_logger(LOGGER.get_or_init(|| logger)).map(|_| log::set_max_level(LevelFilter::Info))
+        log_file: Some(RwLock::new(log_file)),
+        log_path: Some(String::from(log_path.to_str().unwrap())),
+    }
 }
 
 pub fn get_log_path() -> Option<String> {
-    LOGGER.get().map(|x| x.log_path.clone())
+    LOGGER.get().and_then(|x| x.log_path.clone())
 }

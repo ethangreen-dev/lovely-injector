@@ -4,7 +4,9 @@ use core::slice;
 use std::collections::{HashMap, HashSet};
 use std::ffi::{c_int, CStr};
 use std::panic;
-use std::path::{Path, PathBuf};
+#[cfg(feature = "dirs")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 use std::{env, fs};
@@ -18,8 +20,8 @@ use regex_lite::Regex;
 
 use sys::{check_lua_string, LuaFunc, LuaLib, LuaState, LuaStateTrait, LUA};
 
-use crate::patch::Target;
 use crate::dump::write_dump;
+use crate::patch::Target;
 
 pub mod chunk_vec_cursor;
 pub mod dump;
@@ -95,8 +97,50 @@ pub struct Lovely {
 }
 
 impl Lovely {
+    /// Default mod directory
+    #[cfg(feature = "dirs")]
+    fn default_mod_dir() -> PathBuf {
+        let cur_exe =
+            env::current_exe().expect("Failed to get the path of the current executable.");
+        let game_name = if env::consts::OS == "macos" {
+            cur_exe
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+                .expect("Couldn't find parent .app of current executable path")
+                .file_name()
+                .expect("Failed to get file_name of parent directory of current executable")
+                .to_string_lossy()
+                .strip_suffix(".app")
+                .expect("Parent directory of current executable path was not an .app")
+                .replace(".", "_")
+        } else {
+            cur_exe
+                .file_stem()
+                .expect("Failed to get file_stem component of current executable path.")
+                .to_string_lossy()
+                .replace(".", "_")
+        };
+        dirs::data_dir().unwrap().join(game_name).join("Mods")
+    }
+
+    #[cfg(not(feature = "dirs"))]
+    fn default_mod_dir() -> PathBuf {
+        panic!("lovely-core was built without the `dirs` feature, pass the mod directory to Lovely::init_with_mod_dir, set LOVELY_MOD_DIR or use --mod-dir")
+    }
+
     /// Initialize the Lovely patch runtime.
     pub fn init(loadbuffer: &'static LoadBuffer, lualib: LuaLib, dump_all: bool) -> &'static Self {
+        Self::init_with_mod_dir(loadbuffer, lualib, dump_all, None)
+    }
+
+    /// Initialize the Lovely patch runtime with an explicit mod directory.
+    pub fn init_with_mod_dir(
+        loadbuffer: &'static LoadBuffer,
+        lualib: LuaLib,
+        dump_all: bool,
+        mod_dir: Option<PathBuf>,
+    ) -> &'static Self {
         assert!(RUNTIME.get().is_none());
 
         LUA.set(lualib)
@@ -107,44 +151,19 @@ impl Lovely {
         let args = std::env::args().skip(1).collect_vec();
         let mut opts = Options::new(args.iter().map(String::as_str));
 
-        let mut mod_dir = if let Some(env_path) = env::var_os("LOVELY_MOD_DIR") {
-            PathBuf::from(env_path)
-        } else {
-            let cur_exe =
-                env::current_exe().expect("Failed to get the path of the current executable.");
-            let game_name = if env::consts::OS == "macos" {
-                cur_exe
-                    .parent()
-                    .and_then(Path::parent)
-                    .and_then(Path::parent)
-                    .expect("Couldn't find parent .app of current executable path")
-                    .file_name()
-                    .expect("Failed to get file_name of parent directory of current executable")
-                    .to_string_lossy()
-                    .strip_suffix(".app")
-                    .expect("Parent directory of current executable path was not an .app")
-                    .replace(".", "_")
-            } else {
-                cur_exe
-                    .file_stem()
-                    .expect("Failed to get file_stem component of current executable path.")
-                    .to_string_lossy()
-                    .replace(".", "_")
-            };
-            dirs::data_dir().unwrap().join(game_name).join("Mods")
-        };
+        let mut mod_dir = env::var_os("LOVELY_MOD_DIR").map(PathBuf::from).or(mod_dir);
 
         let mut is_vanilla = false;
 
         while let Some(opt) = opts.next_arg().expect("Failed to parse argument.") {
             match opt {
-                Arg::Long("mod-dir") => {
-                    mod_dir = opts.value().map(PathBuf::from).unwrap_or(mod_dir)
-                }
+                Arg::Long("mod-dir") => mod_dir = opts.value().map(PathBuf::from).ok().or(mod_dir),
                 Arg::Long("vanilla") => is_vanilla = true,
                 _ => (),
             }
         }
+
+        let mod_dir = mod_dir.unwrap_or_else(Self::default_mod_dir);
 
         let log_dir = mod_dir.join("lovely").join("log");
 
@@ -173,31 +192,36 @@ impl Lovely {
         }
 
         // Validate that an older Lovely install doesn't already exist within the game directory.
-        let exe_path = env::current_exe().unwrap();
-        let game_dir = exe_path.parent().unwrap();
+        // Skipped when there is no executable path to look (like Switch).
+        if let Ok(exe_path) = env::current_exe() {
+            let game_dir = exe_path.parent().unwrap();
 
-        #[cfg(target_os = "windows")]
-        {
-            let dwmapi = game_dir.join("dwmapi.dll");
+            #[cfg(target_os = "windows")]
+            {
+                let dwmapi = game_dir.join("dwmapi.dll");
 
-            if dwmapi.is_file() {
-                panic!(
-                    "An old Lovely installation was detected within the game directory. \
-                    This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
-                );
+                if dwmapi.is_file() {
+                    panic!(
+                        "An old Lovely installation was detected within the game directory. \
+                        This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {dwmapi:?}"
+                    );
+                }
+                let version = game_dir.join("version.dll");
+
+                if version.is_file() {
+                    panic!(
+                        "An old Lovely installation was detected within the game directory. \
+                        This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {version:?}"
+                    );
+                }
             }
-            let version = game_dir.join("version.dll");
 
-            if version.is_file() {
-                panic!(
-                    "An old Lovely installation was detected within the game directory. \
-                    This problem MUST BE FIXED before you can start the game.\n\nTO FIX: Delete the file at {version:?}"
-                );
-            }
+            info!("Game directory is at {game_dir:?}");
         }
 
-        info!("Game directory is at {game_dir:?}");
-        info!("Writing logs to {log_dir:?}");
+        if log::get_log_path().is_some() {
+            info!("Writing logs to {log_dir:?}");
+        }
 
         if !mod_dir.is_dir() {
             info!("Creating mods directory at {mod_dir:?}");
@@ -312,7 +336,13 @@ impl Lovely {
             // Replace . in module names because it means /
             let f2 = capture.get(2).map_or("", |x| x.as_str()).replace(".", "/");
             let f3 = capture.get(3).map_or("", |x| x.as_str());
-            format!("{f1}/{f2}/{f3}")
+            // A `//` in the dump path is rejected by some filesystems (nn::fs on Switch).
+            [f1, f2.as_str(), f3]
+                .iter()
+                .filter(|s| !s.is_empty())
+                .copied()
+                .collect::<Vec<_>>()
+                .join("/")
         } else {
             name.replace("@", "")
         };
