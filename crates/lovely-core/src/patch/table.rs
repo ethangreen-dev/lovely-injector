@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -34,11 +34,12 @@ impl Default for PatchTable {
 impl PatchTable {
     /// Load patches from the provided mod directory.
     pub fn load(mod_dir: &Path) -> Result<PatchTable> {
-        let raw_patches = loader::load_patches_new(mod_dir)?;
+        let new_dir = dunce::canonicalize(mod_dir).with_context(|| format!("Could not resolve resolve mod dir {:?}", mod_dir))?;
+        let raw_patches = loader::load_patches_new(&new_dir)?;
         let (patches, targets, vars) = loader::process_patches(raw_patches);
 
         Ok(PatchTable {
-            mod_dir: mod_dir.to_path_buf(),
+            mod_dir: new_dir,
             targets,
             patches,
             vars,
