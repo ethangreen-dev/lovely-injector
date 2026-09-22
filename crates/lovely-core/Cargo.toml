@@ -23,6 +23,7 @@ crop = "0.4.2"
 anyhow = "1.0.100"
 zip = "6.0.0"
 jiff = "0.2.35"
+dunce = "1.0.5"
 
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false }
