@@ -234,7 +234,7 @@ fn get_zip_patches(zip_file: &Path) -> Result<(PathBuf, Vec<IntermediatePatch>)>
 /// 
 /// Zip archives are supported and uniquely support directory nesting 
 /// (i.e., mod.zip/dir/lovely.toml), but otherwise are treated the same as dir mods.
-pub fn load_patches_new(mod_dir: &PathBuf) -> Result<Vec<(Patch, Priority, PathBuf, HashMap<String, String>)>> {
+pub fn load_patches_new(mod_dir: &Path) -> Result<Vec<(Patch, Priority, PathBuf, HashMap<String, String>)>> {
     let blacklist_file = mod_dir.join("lovely").join("blacklist.txt");
 
     let mut blacklist: HashSet<String> = HashSet::new();
@@ -499,11 +499,12 @@ sources = ["inject.lua"]
     }
 
     #[test]
-    fn zip_no_mod_root_errors() {
+    fn zip_no_mod_root_is_empty() {
         let temp = TempDir::new().unwrap();
         let zip = make_zip(&temp, "empty.zip", &[("random.txt", "")]);
 
-        assert!(get_zip_patches(&zip).is_err());
+        let (_, patches) = get_zip_patches(&zip).unwrap();
+        assert!(patches.is_empty());
     }
 
     #[test]
