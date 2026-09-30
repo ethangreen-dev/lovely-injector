@@ -40,6 +40,8 @@ jobs:
         env:
           LOVELY_BENCH_MODE: long
         run: |
+          # rust-cache restores a partially cleaned target/criterion, which makes Criterion error out
+          rm -rf target/criterion
           cargo bench --bench patches -- --output-format bencher | tee bench-output.txt
 
       - name: Compare against baseline and comment
@@ -87,7 +89,20 @@ jobs:
         env:
           LOVELY_BENCH_MODE: long
         run: |
+          # rust-cache restores a partially cleaned target/criterion, which makes Criterion error out
+          rm -rf target/criterion
           cargo bench --bench patches -- --output-format bencher | tee bench-output.txt
+
+      # auto-push can't be combined with external-data-json-path, so the PR baseline gets its own step
+      - name: Update baseline for PR comparisons
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: lovely-core patches
+          tool: 'cargo'
+          output-file-path: bench-output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          save-data-file: true
+          external-data-json-path: ./bench-cache/benchmark-data.json
 
       - name: Publish results to GitHub Pages
         uses: benchmark-action/github-action-benchmark@v1
@@ -98,7 +113,5 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           gh-pages-branch: gh-pages
-          save-data-file: true
-          external-data-json-path: ./bench-cache/benchmark-data.json
           # Keep charts concise
           max-items-in-chart: 50
